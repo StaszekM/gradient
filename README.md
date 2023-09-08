@@ -12,3 +12,5 @@ $ python3.8 -m venv env
 $ source ./env/bin/activate
 $ pip install -r requirements.txt
 ```
+
+data, models and large file management provided by `dvc`

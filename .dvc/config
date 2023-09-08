@@ -1,0 +1,6 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = s3://projekt-gradient
+    access_key_id = MY_ACCESS_KEY
+    secret_access_key = MY_SECRET
