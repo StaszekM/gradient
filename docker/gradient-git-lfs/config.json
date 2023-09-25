@@ -1,0 +1,25 @@
+{
+    "base_url": "http://localhost:9999/",
+    "port": 9999,
+    "private": false,
+    "authenticator": {
+        "type": "none",
+        "options": {}
+    },
+    "ssh": {
+        "enabled": false
+    },
+    "store": {
+        "type": "s3",
+        "options": {
+            "bucket": "gradient-git-lfs",
+            "region": "eu-north-1"
+        }
+    },
+    "jwt": {
+        "algorithm": "HS256",
+        "secret": "node-git-lfs-jwt-test-key",
+        "issuer": "node-git-lfs",
+        "expiresIn": "30m"
+    }
+}
