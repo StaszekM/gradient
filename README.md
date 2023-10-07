@@ -15,3 +15,6 @@ $ git lfs install
 ```
 
 Large files management provided by `git-lfs`
+
+
+To run script scrape_traffic_data.py you need to add you tomtom api key as env variable API_KEY. In case of problems visit page: https://developer.tomtom.com/platform/documentation/dashboard/api-key-management
