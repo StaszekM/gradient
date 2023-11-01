@@ -15,3 +15,19 @@ $ git lfs install
 ```
 
 Large files management provided by `git-lfs`
+
+# Rules for commit and branch names
+
+Run the following command to inject our custom hooks into your local repo:
+
+```bash
+cp -r ./githooks/. .git/hooks/
+```
+
+These hooks control the naming of our branches and commits:
+
+- Branch: `(task|story|bugfix|improvement|research)/GRA-[0-9]+ (your message)`
+
+- Commit msg: `GRA-[0-9]+ (your message)`
+
+**Please verify that your local git hooks work**: try to create a branch with random name or try to commit with a random message in terminal and check if you receive an error message and commit does not occur.
