@@ -77,7 +77,7 @@ class OSMDataEmbedder:
         Performs Embedding using choosen Embedder and IntersectionJoiner.
 
         Returns:
-            pd.Dataframe: Data with embeddings.
+            pd.Dataframe: Data with embeddings and geometry
         """
         regions_gdf: gpd.GeoDataFrame = self.regionalizer.transform(self.area)
         data_gdf: gpd.GeoDataFrame = self.__load_regions()
@@ -87,7 +87,8 @@ class OSMDataEmbedder:
         embeddings: pd.DataFrame = self.embedder.transform(regions_gdf,
                                                        data_gdf,
                                                          joint_df)
-        return embeddings
+        embeddings_with_geometry = pd.merge(regions_gdf, embeddings, on="region_id", how="inner")
+        return embeddings_with_geometry
 
 
 
