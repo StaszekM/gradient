@@ -15,3 +15,8 @@ $ git lfs install
 ```
 
 Large files management provided by `git-lfs`
+
+
+https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html
+
+UNAME=$(id -un) GID=$(id -g) USERID=$(id -u) docker compose up --force-recreate --build
