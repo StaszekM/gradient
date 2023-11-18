@@ -3,3 +3,5 @@ env/
 .vscode/
 __pycache__
 lightning_logs/
+**/__pycache__/**
+*.py[cod]

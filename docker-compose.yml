@@ -1,0 +1,16 @@
+services:
+  venv:
+    runtime: nvidia
+    build:
+      context: .
+      args:
+        - UNAME=${UNAME}
+        - GID=${GID}
+        - USERID=${USERID}
+    volumes:
+      - .:/app:rw
+    environment:
+      - BUILDKIT_PROGRESS=plain
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "9000:9000"
