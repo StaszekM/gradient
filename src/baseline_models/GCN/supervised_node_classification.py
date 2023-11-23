@@ -131,7 +131,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         axs[0].set(title="PCA")
         sns.scatterplot(x=z_UMAP[:, 0], y=z_UMAP[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[1])
         axs[1].set(title="UMAP")
-        sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set3", ax=axs[2])
-        axs[1].set(title="tsne")
+        sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[2])
+        axs[2].set(title="tsne")
 
         plt.show()
