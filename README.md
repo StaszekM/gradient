@@ -55,3 +55,4 @@ After attaching VS Code, you can navigate in container's file system normally, r
 1. Do install packages with `python3.8 -m pip install`,
 2. Do include installed package version in `requirements.txt`,
 3. Don't include packages that are internal packages not installed by you, let pip resolve conflicting dependencies by itself
+4. Python starts in container at `/` directory, so all relative imports from source code might not be found. If this is the case, for example in Jupyter, add cell with `os.chdir('/app')` to fix this.
