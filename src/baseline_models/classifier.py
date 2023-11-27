@@ -54,7 +54,7 @@ class CustomClassifier:
         """
         metrics = {}
 
-        f1 = f1_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred, average='weighted')
         metrics['F1 Score'] = f1
 
         accuracy = accuracy_score(y_test, y_pred)
@@ -67,8 +67,8 @@ class CustomClassifier:
         metrics['Recall'] = recall
 
         if hasattr(self.clf_model, "predict_proba"):
-            y_prob = self.clf_model.predict_proba(X_test)[:, 1]
-            auc_score = roc_auc_score(y_test, y_prob)
+            y_prob = self.clf_model.predict_proba(X_test)
+            auc_score = roc_auc_score(y_test, y_prob, multi_class="ovr", average='weighted')
             metrics['AUC Score'] = auc_score
 
         fig, ax = plt.subplots()
