@@ -14,9 +14,24 @@ import seaborn as sns
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class SupervisedNodeClassificationGNN(pl.LightningModule):
-    """Supervised node classification for a given GNN model."""
+    """    
+    Lightning Module for Supervised Node Classification using a Graph Neural Network (GNN).
+    
+    Attributes:
+        _gnn (nn.Module): The underlying Graph Neural Network model.
+        _classification_head (nn.Sequential): Classification head for predicting node labels.
+        _loss_fn (nn.NLLLoss): Loss function for training.
+    """
 
     def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int):
+        """
+        Init SupervisedNodeClassificationGNN.
+
+        Args:
+            gnn (nn.Module): The Graph Neural Network model.
+            emb_dim (int): Dimension of node embeddings.
+            num_classes (int): Number of classes for node classification.
+        """
         super().__init__()
 
         self._gnn = gnn.to(device)
@@ -37,9 +52,30 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         edge_index: torch.Tensor,
         edge_weight: torch.Tensor,
     ) -> torch.Tensor:
+        """
+        Forward pass of the GNN model.
+
+        Args:
+            x (torch.Tensor): Input node features.
+            edge_index (torch.Tensor): Graph edge indices.
+            edge_weight (torch.Tensor): Edge weights.
+
+        Returns:
+            torch.Tensor: Output tensor after the forward pass.
+        """
         return self._gnn(x, edge_index, edge_weight)
 
     def training_step(self, batch: List[Data], batch_idx: int) -> torch.Tensor:
+        """
+        Training step.
+
+        Args:
+            batch (List[Data]): List of graph data batches.
+            batch_idx (int): Index of the current batch.
+
+        Returns:
+            torch.Tensor: Training loss.
+        """
         data = batch[0]
 
         y_pred, y, auc = self._common_step(data=data, mask=data.train_mask)
@@ -52,7 +88,16 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch: List[Data], batch_idx: int):
+    def validation_step(self, batch: List[Data], batch_idx: int) -> dict:
+        """
+        Validation step.
+
+        Args:
+            batch (List[Data]): List of graph data batches.
+            batch_idx (int): Index of the current batch.
+        Returns:
+            dict: Dictionary containing the computed AUC score for validation.
+        """
         data = batch[0]
 
         _, _, auc = self._common_step(data=data, mask=data.val_mask)
@@ -63,6 +108,15 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         return {"auc": auc}
 
     def test_step(self, batch: List[Data], batch_idx: int):
+        """
+        Test step.
+
+        Args:
+            batch (List[Data]): List of graph data batches.
+            batch_idx (int): Index of the current batch.
+        Returns:
+            dict: Dictionary containing the computed AUC score for test.
+        """
         data = batch[0]
 
         _, _, auc = self._common_step(data=data, mask=data.test_mask)
@@ -78,6 +132,17 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         batch_idx: int,
         dataloader_idx: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Prediction step.
+
+        Args:
+            batch (List[Data]): List of graph data batches.
+            batch_idx (int): Index of the current batch.
+            dataloader_idx (Optional[int]): Index of the dataloader (default: None).
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Predicted node embeddings and ground truth labels.
+        """
         data = batch[0]
         try:
             z = self(data.x, data.edge_index, data.weight)
@@ -92,6 +157,16 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         data: Data,
         mask: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, float]:
+        """
+        Common step for training, validation, and test steps.
+
+        Args:
+            data (Data): Graph data.
+            mask (torch.Tensor): Mask indicating the subset of nodes to consider.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, float]: Predicted labels, true labels, and AUC score.
+        """
         try:
             z = self(data.x, data.edge_index, data.weight)
         except:
@@ -109,6 +184,12 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         return y_pred, y, auc
 
     def configure_optimizers(self):
+        """
+        Configures the optimizer.
+
+        Returns:
+            torch.optim.Optimizer: Optimizer for training.
+        """
         return torch.optim.AdamW(
             params=self.parameters(),
             lr=1e-3,
@@ -116,6 +197,14 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         )
 
     def visualize_embeddings(z: torch.Tensor, y: torch.Tensor, n_components: int = 2):
+        """
+        Visualizes node embeddings using PCA, UMAP, and t-SNE.
+
+        Args:
+            z (torch.Tensor): Node embeddings.
+            y (torch.Tensor): Ground truth labels.
+            n_components (int): Number of components for dimensionality reduction (default: 2).
+        """
         
         z = z.to(device)
         y = y.to(device)
@@ -131,7 +220,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         axs[0].set(title="PCA")
         sns.scatterplot(x=z_UMAP[:, 0], y=z_UMAP[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[1])
         axs[1].set(title="UMAP")
-        sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set3", ax=axs[2])
-        axs[1].set(title="tsne")
+        sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[2])
+        axs[2].set(title="tsne")
 
         plt.show()
