@@ -1,6 +1,5 @@
 cache/
 env/
 .vscode/
-cache
 __pycache__
 lightning_logs/
