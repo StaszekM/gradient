@@ -2,4 +2,4 @@ cache/
 env/
 .vscode/
 __pycache__
-
+lightning_logs/

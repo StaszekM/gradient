@@ -225,6 +225,7 @@ sqlalchemy = "*"
 jupyterthemes = "*"
 hyperopt = "*"
 tensorboard = "*"
+statsmodels = "*"
 
 [dev-packages]
 
