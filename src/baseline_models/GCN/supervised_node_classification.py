@@ -9,6 +9,7 @@ import umap
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
+from typing import Callable
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -20,10 +21,10 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
     Attributes:
         _gnn (nn.Module): The underlying Graph Neural Network model.
         _classification_head (nn.Sequential): Classification head for predicting node labels.
-        _loss_fn (nn.NLLLoss): Loss function for training.
+        _loss_fn (function): Loss function for training.
     """
 
-    def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int):
+    def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int, loss_fn: Callable = nn.NLLLoss):
         """
         Init SupervisedNodeClassificationGNN.
 
@@ -31,6 +32,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             gnn (nn.Module): The Graph Neural Network model.
             emb_dim (int): Dimension of node embeddings.
             num_classes (int): Number of classes for node classification.
+            loss_fn (Callable): Loss function (default: nn.NLLLoss).
         """
         super().__init__()
 
@@ -44,7 +46,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             nn.LogSoftmax(dim=1),
         ).to(device)
 
-        self._loss_fn = nn.NLLLoss()
+        self._loss_fn = loss_fn()
 
     def forward(
         self,
@@ -80,7 +82,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         y_pred, y, auc = self._common_step(data=data, mask=data.train_mask)
 
-        loss = self._loss_fn(input=y_pred, target=y)
+        loss = self._loss_fn(y_pred, y)
 
         self.log("step", self.trainer.current_epoch)
         self.log("train/loss", loss.item(), on_epoch=True, on_step=False)
@@ -196,7 +198,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             weight_decay=5e-4,
         )
 
-    def visualize_embeddings(z: torch.Tensor, y: torch.Tensor, n_components: int = 2):
+    def visualize_embeddings(z: torch.Tensor, y: torch.Tensor, n_components: int = 2) -> plt.figure:
         """
         Visualizes node embeddings using PCA, UMAP, and t-SNE.
 
@@ -204,6 +206,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             z (torch.Tensor): Node embeddings.
             y (torch.Tensor): Ground truth labels.
             n_components (int): Number of components for dimensionality reduction (default: 2).
+        fig (plt.Figure): Matplotlib figure containing the scatter plots with node embeddings visualizations.
         """
         
         z = z.to(device)
@@ -223,4 +226,4 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[2])
         axs[2].set(title="tsne")
 
-        plt.show()
+        return fig

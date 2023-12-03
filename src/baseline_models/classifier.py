@@ -1,23 +1,23 @@
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
-from sklearn.metrics import ConfusionMatrixDisplay, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
-
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.base import BaseEstimator
 
 class CustomClassifier:
     """
     A custom classifier that provides a simple interface for training and evaluating machine learning models.
 
     """
-    def __init__(self, model=None):
+    def __init__(self, model: BaseEstimator = LogisticRegression()):
         """
         Init CustomClassifier.
 
         Args:
-            model: Scikit-learn compatible classification model (default: LogisticRegression)
+            model (sklearn.base.BaseEstimator): Scikit-learn compatible classification model (default: LogisticRegression)
 
         """
-        self.clf_model = model if model else LogisticRegression()
+        self.clf_model = model
 
     def train(self, X_train: np.ndarray, y_train: np.ndarray) -> None:
         """
@@ -41,7 +41,7 @@ class CustomClassifier:
         """
         return self.clf_model.predict(X_test)
 
-    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, y_pred: np.ndarray) -> dict:
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, y_pred: np.ndarray) -> tuple:
         """
         Evaluates the classifier's performance using various metrics and displays results.
 
@@ -50,7 +50,8 @@ class CustomClassifier:
             y_test: True labels for the test data.
             y_pred: Predicted labels for the test data.
         Returns:
-            Dictionary containing evaluation metrics (F1 score, accuracy, precision, recall, AUC score).
+            metrics: Dictionary containing performance metrics such as F1 Score, Accuracy, Precision, Recall, and AUC Score (if applicable).
+            conf_matrix_disp: Confusion Matrix visualization.
         """
         metrics = {}
 
@@ -71,9 +72,8 @@ class CustomClassifier:
             auc_score = roc_auc_score(y_test, y_prob, multi_class="ovr", average='weighted')
             metrics['AUC Score'] = auc_score
 
-        fig, ax = plt.subplots()
-        ConfusionMatrixDisplay.from_predictions(y_test, y_pred, labels=self.clf_model.classes_, ax=ax)
-        fig.suptitle("Confusion Matrix for the Baseline Classifier")
-        plt.show()
-
-        return metrics
+        cm = confusion_matrix(y_test, y_pred, labels=self.clf_model.classes_)
+        conf_matrix_disp = ConfusionMatrixDisplay(confusion_matrix=cm,
+                               display_labels=self.clf_model.classes_)
+        
+        return metrics, conf_matrix_disp
