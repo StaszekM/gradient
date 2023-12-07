@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import ConfusionMatrixDisplay, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 import torch
 from torch import nn
 from torch_geometric.data import Data
@@ -9,7 +9,7 @@ import umap
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import numpy as np
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -23,7 +23,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         _loss_fn (nn.NLLLoss): Loss function for training.
     """
 
-    def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int):
+    def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int, lr: float):
         """
         Init SupervisedNodeClassificationGNN.
 
@@ -45,6 +45,10 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         ).to(device)
 
         self._loss_fn = nn.NLLLoss()
+
+        self.lr = lr
+
+        self.train_losses = []
 
     def forward(
         self,
@@ -78,13 +82,15 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        y_pred, y, auc = self._common_step(data=data, mask=data.train_mask)
+        y_pred, y, auc, f1, accuracy, precision, recall = self._common_step(data=data, mask=data.train_mask)
 
         loss = self._loss_fn(input=y_pred, target=y)
 
         self.log("step", self.trainer.current_epoch)
         self.log("train/loss", loss.item(), on_epoch=True, on_step=False)
         self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
+
+        self.train_losses.append(np.mean(loss.item()))
 
         return loss
 
@@ -100,10 +106,14 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        _, _, auc = self._common_step(data=data, mask=data.val_mask)
+        _, _, auc, f1, accuracy, precision, recall= self._common_step(data=data, mask=data.val_mask)
 
         self.log("step", self.trainer.current_epoch)
         self.log("val/auc", auc.item(), on_epoch=True, on_step=False)
+        self.log("val/f1", f1.item(), on_epoch=True, on_step=False)
+        self.log("val/accuracy", accuracy.item(), on_epoch=True, on_step=False)
+        self.log("val/precision", precision.item(), on_epoch=True, on_step=False)
+        self.log("val/recall", recall.item(), on_epoch=True, on_step=False)
 
         return {"auc": auc}
 
@@ -119,10 +129,14 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        _, _, auc = self._common_step(data=data, mask=data.test_mask)
+        _, _, auc, f1, accuracy, precision, recall  = self._common_step(data=data, mask=data.test_mask)
 
         self.log("step", self.trainer.current_epoch)
         self.log("test/auc", auc.item(), on_epoch=True, on_step=False)
+        self.log("test/f1", f1.item(), on_epoch=True, on_step=False)
+        self.log("test/accuracy", accuracy.item(), on_epoch=True, on_step=False)
+        self.log("test/precision", precision.item(), on_epoch=True, on_step=False)
+        self.log("test/recall", recall.item(), on_epoch=True, on_step=False)
 
         return {"auc": auc}
 
@@ -179,9 +193,21 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             y_true=y.detach().cpu().numpy(),
             y_score=y_pred.exp().detach().cpu().numpy(),
             multi_class="ovr",
+            average='weighted', 
         )
+    
+        y_pred_b = torch.argmax(y_pred.exp(), dim=1)
 
-        return y_pred, y, auc
+        f1 = f1_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average='weighted')
+
+        accuracy = accuracy_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy())
+
+        precision = precision_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average='weighted')
+
+        recall = recall_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average='weighted')
+     
+
+        return y_pred, y, auc, f1, accuracy, precision, recall
 
     def configure_optimizers(self):
         """
@@ -192,7 +218,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         return torch.optim.AdamW(
             params=self.parameters(),
-            lr=1e-3,
+            lr=self.lr,
             weight_decay=5e-4,
         )
 
@@ -223,4 +249,8 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[2])
         axs[2].set(title="tsne")
 
+        plt.show()
+    
+    def show_loss_plot(self):
+        plt.plot(range(self.trainer.current_epoch), self.train_losses)
         plt.show()
