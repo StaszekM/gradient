@@ -2,3 +2,5 @@ env
 .vscode/
 cache
 .env
+__pycache__
+
