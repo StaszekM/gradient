@@ -6,8 +6,8 @@ import torch
 import matplotlib.pyplot as plt
 
 class OSMEmbedderGraph:
-    def __init__(self, gdf: gpd.GeoDataFrame, labels_column_name:str, weights:str):
-        self.weights = weights
+    def __init__(self, gdf: gpd.GeoDataFrame, labels_column_name:str, weights_type:str = 'neighboors'):
+        self.weights = weights_type
         self.gdf = gdf
         self.node_labels = gdf[labels_column_name].to_numpy(dtype=np.int8)
         self.node_features = gdf.drop(['geometry', labels_column_name], axis=1).to_numpy(dtype=np.float32)
@@ -15,6 +15,9 @@ class OSMEmbedderGraph:
         self.graph_data = None
         
     def createGraph_nx(self):
+
+        assert self.weights in ['neighboors', 'shortest_path', 'centroid'], f"Unknown weights_type: '{self.weights}'. Select one from ['neighboors', 'shortest_path', 'centroid']"
+        
         graph = nx.Graph()
         
         for i in range(len(self.gdf)):
@@ -53,7 +56,10 @@ class OSMEmbedderGraph:
                     node_j = self.gdf.iloc[j]
                     distance = node_i['geometry'].centroid.distance(node_j['geometry'].centroid)
                     weight = 1 / (distance + 1e-9)  # Use a small epsilon to avoid division by zero
-                    weighted_graph[i][j]['weight'] = weight
+                    try:
+                        weighted_graph[i][j]['weight'] = weight
+                    except:
+                        weighted_graph.add_edge(i, j, weight=weight)
             self.graph_nx = weighted_graph
             return weighted_graph  
         
@@ -77,11 +83,13 @@ class OSMEmbedderGraph:
             self.createGraph_nx()
         
         if self.weights=='centroid' or self.weights=='shortest_path':
-            width = list(nx.get_edge_attributes(self.graph_nx, 'weight').values())
-            nx.draw(self.graph_nx, node_size=30, node_color='plum', width=width)
+            widths = list(nx.get_edge_attributes(self.graph_nx, 'weight').values())
+            max_width = max(widths)
+            widths = [width/max_width for width in widths]
+            nx.draw(self.graph_nx, node_size=30, node_color='plum', width=widths)
             plt.show()
         else:
-            nx.draw(self.graph_nx, node_size=30, node_color='plum', width=width)
+            nx.draw(self.graph_nx, node_size=30, node_color='plum', width=1)
             plt.show()
     
     def show_statistics(self):
@@ -97,6 +105,7 @@ class OSMEmbedderGraph:
         print('Directed: ', data.is_directed())
         print('Graph density: ', round((edges / (max_edges) * 100), 3), '%')
         return
+
 
 
 
