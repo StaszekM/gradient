@@ -11,7 +11,6 @@ nbformat==5.9.2
 torch==2.1.1
 pyvis==0.3.2
 torch_geometric==2.4.0
-ipykernel==6.26.0
 jupyter==1.0.0
 black==23.11.0
 plotly==5.18.0
