@@ -4,4 +4,5 @@ env/
 **/__pycache__/**
 *.py[cod]
 docker-compose.override.yml
-.vscode/
+__pycache__
+lightning_logs/

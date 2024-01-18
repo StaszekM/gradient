@@ -56,3 +56,18 @@ After attaching VS Code, you can navigate in container's file system normally, r
 2. Do include installed package version in `requirements.txt`,
 3. Don't include packages that are internal packages not installed by you, let pip resolve conflicting dependencies by itself
 4. Python starts in container at `/` directory, so all relative imports from source code might not be found. If this is the case, for example in Jupyter, add cell with `os.chdir('/app')` to fix this.
+# Rules for commit and branch names
+
+Run the following command to inject our custom hooks into your local repo:
+
+```bash
+cp -r ./githooks/. .git/hooks/
+```
+
+These hooks control the naming of our branches and commits:
+
+- Branch: `(task|story|bugfix|improvement|research)/GRA-[0-9]+ (your message)`
+
+- Commit msg: `GRA-[0-9]+ (your message)`
+
+**Please verify that your local git hooks work**: try to create a branch with random name or try to commit with a random message in terminal and check if you receive an error message and commit does not occur.

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Get the current branch name
+current_branch=$(git symbolic-ref --short HEAD)
+
+# Define the required branch name prefix
+required_prefix="(task|story|bugfix|improvement|research)/GRA-[0-9]+"
+
+# Check if the branch name starts with the required prefix
+if [[ ! "$current_branch" =~ ^$required_prefix ]]; then
+  echo "Error: Branch name must start with '$required_prefix [message]'. Your branch is called '$current_branch'."
+  echo "For example: task/GRA-637-my-task"
+  exit 1
+fi
