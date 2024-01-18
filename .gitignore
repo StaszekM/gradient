@@ -5,3 +5,8 @@ __pycache__
 lightning_logs/
 **/__pycache__/**
 *.py[cod]
+<<<<<<< HEAD
+=======
+docker-compose.override.yml
+.vscode/
+>>>>>>> 996d549 (GRA-25 Add scraper for accidents, add accidents data, add notebooks for analysis (cities overall and each city in isolation))
