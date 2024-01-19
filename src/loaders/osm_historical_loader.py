@@ -100,7 +100,7 @@ class OSMHistoricalLoader:
                 return data_gdf
             except Exception as e:
                 if retry_count == max_retries_allowed - 1:
-                    raise e  # If the maximum retries are reached, raise the exception
+                    raise e 
                 print(f"ConnectionError: Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
     
