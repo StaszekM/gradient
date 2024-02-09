@@ -69,7 +69,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         return self._gnn(x, edge_index, edge_weight)
 
-    def training_step(self, batch: List[Data], batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: List[Data], batch_idx: int, metric_average_types: List[str] = ['weighted']) -> torch.Tensor:
         """
         Training step.
 
@@ -82,19 +82,19 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        y_pred, y, auc, f1, accuracy, precision, recall = self._common_step(data=data, mask=data.train_mask)
+        y_true, y_pred, metrics_dict = self._common_step(data=data, mask=data.test_mask, metric_average_types=metric_average_types)
 
-        loss = self._loss_fn(input=y_pred, target=y)
+        loss = self._loss_fn(input=y_pred, target=y_true)
 
         self.log("step", self.trainer.current_epoch)
         self.log("train/loss", loss.item(), on_epoch=True, on_step=False)
-        self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
+        # self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
 
         self.train_losses.append(np.mean(loss.item()))
 
         return loss
 
-    def validation_step(self, batch: List[Data], batch_idx: int) -> dict:
+    def validation_step(self, batch: List[Data], batch_idx: int, metric_average_types: List[str] = ['weighted']) -> dict:
         """
         Validation step.
 
@@ -104,20 +104,18 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         Returns:
             dict: Dictionary containing the computed AUC score for validation.
         """
+    
         data = batch[0]
 
-        _, _, auc, f1, accuracy, precision, recall= self._common_step(data=data, mask=data.val_mask)
+        y_true, y_pred, metrics_dict = self._common_step(data=data, mask=data.val_mask, metric_average_types=metric_average_types)
 
         self.log("step", self.trainer.current_epoch)
-        self.log("val/auc", auc.item(), on_epoch=True, on_step=False)
-        self.log("val/f1", f1.item(), on_epoch=True, on_step=False)
-        self.log("val/accuracy", accuracy.item(), on_epoch=True, on_step=False)
-        self.log("val/precision", precision.item(), on_epoch=True, on_step=False)
-        self.log("val/recall", recall.item(), on_epoch=True, on_step=False)
+        for metric in metrics_dict:
+            self.log(f"val/{metric}", metrics_dict[metric], on_epoch=True, on_step=False)
 
-        return {"auc": auc}
+        return y_true, y_pred
 
-    def test_step(self, batch: List[Data], batch_idx: int):
+    def test_step(self, batch: List[Data], batch_idx: int, metric_average_types: List[str] = ['weighted']):
         """
         Test step.
 
@@ -129,22 +127,19 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        _, _, auc, f1, accuracy, precision, recall  = self._common_step(data=data, mask=data.test_mask)
+        y_true, y_pred, metrics_dict = self._common_step(data=data, mask=data.test_mask, metric_average_types=metric_average_types)
 
         self.log("step", self.trainer.current_epoch)
-        self.log("test/auc", auc.item(), on_epoch=True, on_step=False)
-        self.log("test/f1", f1.item(), on_epoch=True, on_step=False)
-        self.log("test/accuracy", accuracy.item(), on_epoch=True, on_step=False)
-        self.log("test/precision", precision.item(), on_epoch=True, on_step=False)
-        self.log("test/recall", recall.item(), on_epoch=True, on_step=False)
+        for metric in metrics_dict:
+            self.log(f"test/{metric}", metrics_dict[metric], on_epoch=True, on_step=False)
 
-        return {"auc": auc}
+        # return y_true, y_pred
 
     def predict_step(
         self,
         batch: List[Data],
         batch_idx: int,
-        dataloader_idx: Optional[int] = None,
+        dataloader_idx: Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Prediction step.
@@ -163,13 +158,16 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         except:
             z = self(data.x, data.edge_index, None)
         y = data.y
+        y_pred = self._classification_head(z)
 
-        return z, y
+        return z, y, torch.argmax(y_pred.exp(), dim=1).detach().cpu().numpy()
+        
 
     def _common_step(
         self,
         data: Data,
         mask: torch.Tensor,
+        metric_average_types: List[str]
     ) -> Tuple[torch.Tensor, torch.Tensor, float]:
         """
         Common step for training, validation, and test steps.
@@ -188,26 +186,30 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         y_pred = self._classification_head(z)[mask]
         y = data.y[mask]
-
-        auc = roc_auc_score(
-            y_true=y.detach().cpu().numpy(),
-            y_score=y_pred.exp().detach().cpu().numpy(),
-            multi_class="ovr",
-            average='weighted', 
-        )
-    
         y_pred_b = torch.argmax(y_pred.exp(), dim=1)
-
-        f1 = f1_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average='weighted')
+        # print(y_pred)
+        # print(y_pred[:,1])
+        metrics_dict = {}
+        for average in metric_average_types:
+            auc = roc_auc_score(
+                y_true = y.detach().cpu().numpy(),
+                y_score = y_pred[:, 1].exp().detach().cpu().numpy(),
+                multi_class = "ovr",
+                average = average, 
+            )
+            f1 = f1_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average=average)
+            precision = precision_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average=average)
+            recall = recall_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average=average)
+            metrics_dict[f'auc_{average}'] = auc
+            metrics_dict[f'f1_{average}'] = f1
+            metrics_dict[f'precision_{average}'] = precision
+            metrics_dict[f'recall_{average}'] = recall
 
         accuracy = accuracy_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy())
-
-        precision = precision_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average='weighted')
-
-        recall = recall_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy(),  average='weighted')
+        metrics_dict[f'accuracy_{average}'] = accuracy
      
 
-        return y_pred, y, auc, f1, accuracy, precision, recall
+        return y, y_pred, metrics_dict
 
     def configure_optimizers(self):
         """
