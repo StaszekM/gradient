@@ -42,6 +42,16 @@ for resolution in resolutions:
                         )
                     )
 
+                if os.path.exists(
+                    os.path.join(
+                        notebook_location,
+                        f"notebooks_out/{city_as_filename}/h{resolution}/{method}/{year}/out.ipynb",
+                    )
+                ):
+                    continue
+
+                print(f"Executing {city} {resolution} {method} {year}")
+
                 pm.execute_notebook(
                     os.path.join(notebook_location, "download.ipynb"),
                     os.path.join(
