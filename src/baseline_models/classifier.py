@@ -41,7 +41,7 @@ class CustomClassifier:
         """
         return self.clf_model.predict(X_test)
 
-    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, y_pred: np.ndarray) -> tuple:
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, y_pred: np.ndarray, average: str='weighted') -> tuple:
         """
         Evaluates the classifier's performance using various metrics and displays results.
 
@@ -49,27 +49,28 @@ class CustomClassifier:
             X_test: Input features for testing.
             y_test: True labels for the test data.
             y_pred: Predicted labels for the test data.
+            average: Average type for metrics.
         Returns:
             metrics: Dictionary containing performance metrics such as F1 Score, Accuracy, Precision, Recall, and AUC Score (if applicable).
             conf_matrix_disp: Confusion Matrix visualization.
         """
         metrics = {}
 
-        f1 = f1_score(y_test, y_pred, average='weighted')
+        f1 = f1_score(y_test, y_pred, average=average)
         metrics['F1 Score'] = f1
 
         accuracy = accuracy_score(y_test, y_pred)
         metrics['Accuracy'] = accuracy
 
-        precision = precision_score(y_test, y_pred, average='weighted')
+        precision = precision_score(y_test, y_pred, average=average)
         metrics['Precision'] = precision
 
-        recall = recall_score(y_test, y_pred, average='weighted')
+        recall = recall_score(y_test, y_pred, average=average)
         metrics['Recall'] = recall
 
         if hasattr(self.clf_model, "predict_proba"):
             y_prob = self.clf_model.predict_proba(X_test)
-            auc_score = roc_auc_score(y_test, y_prob, multi_class="ovr", average='weighted')
+            auc_score = roc_auc_score(y_test, np.exp(y_prob[:, 1]), multi_class="ovr", average=average)
             metrics['AUC Score'] = auc_score
 
         cm = confusion_matrix(y_test, y_pred, labels=self.clf_model.classes_)
