@@ -18,3 +18,6 @@ mapclassify==2.6.0
 overpy==0.6
 tqdm==4.66.1
 nbdime==4.0.1
+papermill==2.5.0
+pysal==24.1
+shap==0.44.1
