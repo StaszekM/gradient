@@ -5,10 +5,10 @@
 - Na niższych rozdzielczościach heksagony mają tendencję do grupowania większej liczby wypadków.
 - Odchylenie standardowe liczby wypadków spada wraz ze wzrostem rozdzielczości. 
 
-## Niezbalansowanie cech
-- Największe niezbalansowanie pod względem liczby cech w hexagonie dla klas występuje w grupie cech amenity.
-- Istnieją cechy mocno niezbalansowane pod względem liczności dla klas, wykazujące wysoką korelację z wypadkami. Większość z nich nalezy do grupy amenity i highway.
-- Wspólne niezbalansowane cechy dla resolution 8 i 9 (suma dla miast):
+## Niezrównowazone cechy
+- Największe niezrównowazone pod względem liczby cech w hexagonie dla klas występuje w grupie cech amenity.
+- Istnieją cechy mocno niezrównowazone pod względem liczności dla klas, wykazujące wysoką korelację z wypadkami. Większość z nich nalezy do grupy amenity i highway.
+- Wspólne niezrównowazone cechy dla resolution 8 i 9 (suma dla miast):
 A_driver_t
 A_langua_1
 A_financia
