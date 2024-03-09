@@ -56,7 +56,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         self.lr = lr
 
-        self.train_losses = []
+        
 
     def forward(
         self,
@@ -76,6 +76,9 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             torch.Tensor: Output tensor after the forward pass.
         """
         return self._gnn(x, edge_index, edge_weight)
+    
+    def on_train_start(self) -> None:
+        self.train_losses = []
 
     def training_step(
         self,
@@ -212,30 +215,32 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         y_pred = self._classification_head(z)[mask]
         y = data.y[mask]
+        y_numpy = y.detach().cpu().numpy()
         y_pred_b = torch.argmax(y_pred.exp(), dim=1)
+        y_pred_b_numpy = y_pred_b.cpu().numpy()
         metrics_dict = {}
         for average in metric_average_types:
             auc = roc_auc_score(
-                y_true=y.detach().cpu().numpy(),
+                y_true=y_numpy,
                 y_score=y_pred[:, 1].exp().detach().cpu().numpy(),
                 multi_class="ovr",
                 average=average,
             )
             f1 = f1_score(
-                y.detach().cpu().numpy(), y_pred_b.cpu().numpy(), average=average
+                y_numpy, y_pred_b_numpy , average=average
             )
             precision = precision_score(
-                y.detach().cpu().numpy(), y_pred_b.cpu().numpy(), average=average
+                y_numpy, y_pred_b_numpy , average=average
             )
             recall = recall_score(
-                y.detach().cpu().numpy(), y_pred_b.cpu().numpy(), average=average
+                y_numpy, y_pred_b_numpy , average=average
             )
             metrics_dict[f"auc_{average}"] = auc
             metrics_dict[f"f1_{average}"] = f1
             metrics_dict[f"precision_{average}"] = precision
             metrics_dict[f"recall_{average}"] = recall
 
-        accuracy = accuracy_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy())
+        accuracy = accuracy_score(y_numpy, y_pred_b_numpy)
         metrics_dict[f"accuracy_{average}"] = accuracy
 
         return y, y_pred, metrics_dict
@@ -263,24 +268,24 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             n_components (int): Number of components for dimensionality reduction (default: 2).
         """
 
-        z = z.to(device)
-        y = y.to(device)
+        z = z.to(device).cpu().numpy()
+        y = y.to(device).cpu().numpy()
 
-        z_PCA = PCA(n_components=n_components).fit_transform(z.cpu().numpy())
-        z_UMAP = umap.UMAP(n_components=n_components).fit_transform(z.cpu().numpy())
+        z_PCA = PCA(n_components=n_components).fit_transform(z)
+        z_UMAP = umap.UMAP(n_components=n_components).fit_transform(z)
         tsne = TSNE(n_components=n_components, n_iter=500)
 
-        z_tsne = tsne.fit_transform(z.cpu().numpy(), y.cpu().numpy())
+        z_tsne = tsne.fit_transform(z, y)
 
         fig, axs = plt.subplots(ncols=3, figsize=(15, 5))
         sns.scatterplot(
-            x=z_PCA[:, 0], y=z_PCA[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[0]
+            x=z_PCA[:, 0], y=z_PCA[:, 1], hue=y, palette="Set2", ax=axs[0]
         )
         axs[0].set(title="PCA")
         sns.scatterplot(
             x=z_UMAP[:, 0],
             y=z_UMAP[:, 1],
-            hue=y.cpu().numpy(),
+            hue=y,
             palette="Set2",
             ax=axs[1],
         )
@@ -288,7 +293,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         sns.scatterplot(
             x=z_tsne[:, 0],
             y=z_tsne[:, 1],
-            hue=y.cpu().numpy(),
+            hue=y,
             palette="Set2",
             ax=axs[2],
         )
