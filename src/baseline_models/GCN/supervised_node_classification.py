@@ -1,5 +1,12 @@
 import pytorch_lightning as pl
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    roc_auc_score,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
 import torch
 from torch import nn
 from torch_geometric.data import Data
@@ -9,22 +16,22 @@ import umap
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Callable
+import numpy as np
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class SupervisedNodeClassificationGNN(pl.LightningModule):
-    """    
+    """
     Lightning Module for Supervised Node Classification using a Graph Neural Network (GNN).
-    
+
     Attributes:
         _gnn (nn.Module): The underlying Graph Neural Network model.
         _classification_head (nn.Sequential): Classification head for predicting node labels.
-        _loss_fn (function): Loss function for training.
+        _loss_fn (nn.NLLLoss): Loss function for training.
     """
 
-    def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int, loss_fn: Callable = nn.NLLLoss):
+    def __init__(self, gnn: nn.Module, emb_dim: int, num_classes: int, lr: float):
         """
         Init SupervisedNodeClassificationGNN.
 
@@ -32,7 +39,6 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             gnn (nn.Module): The Graph Neural Network model.
             emb_dim (int): Dimension of node embeddings.
             num_classes (int): Number of classes for node classification.
-            loss_fn (Callable): Loss function (default: nn.NLLLoss).
         """
         super().__init__()
 
@@ -46,7 +52,11 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             nn.LogSoftmax(dim=1),
         ).to(device)
 
-        self._loss_fn = loss_fn()
+        self._loss_fn = nn.NLLLoss()
+
+        self.lr = lr
+
+        self.train_losses = []
 
     def forward(
         self,
@@ -67,7 +77,12 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         return self._gnn(x, edge_index, edge_weight)
 
-    def training_step(self, batch: List[Data], batch_idx: int) -> torch.Tensor:
+    def training_step(
+        self,
+        batch: List[Data],
+        batch_idx: int,
+        metric_average_types: List[str] = ["weighted"],
+    ) -> torch.Tensor:
         """
         Training step.
 
@@ -80,17 +95,26 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        y_pred, y, auc = self._common_step(data=data, mask=data.train_mask)
+        y_true, y_pred, metrics_dict = self._common_step(
+            data=data, mask=data.test_mask, metric_average_types=metric_average_types
+        )
 
-        loss = self._loss_fn(y_pred, y)
+        loss = self._loss_fn(input=y_pred, target=y_true)
 
         self.log("step", self.trainer.current_epoch)
         self.log("train/loss", loss.item(), on_epoch=True, on_step=False)
-        self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
+        # self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
+
+        self.train_losses.append(np.mean(loss.item()))
 
         return loss
 
-    def validation_step(self, batch: List[Data], batch_idx: int) -> dict:
+    def validation_step(
+        self,
+        batch: List[Data],
+        batch_idx: int,
+        metric_average_types: List[str] = ["weighted"],
+    ) -> dict:
         """
         Validation step.
 
@@ -100,16 +124,27 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         Returns:
             dict: Dictionary containing the computed AUC score for validation.
         """
+
         data = batch[0]
 
-        _, _, auc = self._common_step(data=data, mask=data.val_mask)
+        y_true, y_pred, metrics_dict = self._common_step(
+            data=data, mask=data.val_mask, metric_average_types=metric_average_types
+        )
 
         self.log("step", self.trainer.current_epoch)
-        self.log("val/auc", auc.item(), on_epoch=True, on_step=False)
+        for metric in metrics_dict:
+            self.log(
+                f"val/{metric}", metrics_dict[metric], on_epoch=True, on_step=False
+            )
 
-        return {"auc": auc}
+        return y_true, y_pred
 
-    def test_step(self, batch: List[Data], batch_idx: int):
+    def test_step(
+        self,
+        batch: List[Data],
+        batch_idx: int,
+        metric_average_types: List[str] = ["weighted"],
+    ):
         """
         Test step.
 
@@ -121,18 +156,20 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         data = batch[0]
 
-        _, _, auc = self._common_step(data=data, mask=data.test_mask)
+        y_true, y_pred, metrics_dict = self._common_step(
+            data=data, mask=data.test_mask, metric_average_types=metric_average_types
+        )
 
         self.log("step", self.trainer.current_epoch)
-        self.log("test/auc", auc.item(), on_epoch=True, on_step=False)
+        for metric in metrics_dict:
+            self.log(
+                f"test/{metric}", metrics_dict[metric], on_epoch=True, on_step=False
+            )
 
-        return {"auc": auc}
+        # return y_true, y_pred
 
     def predict_step(
-        self,
-        batch: List[Data],
-        batch_idx: int,
-        dataloader_idx: Optional[int] = None,
+        self, batch: List[Data], batch_idx: int, dataloader_idx: Optional[int] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Prediction step.
@@ -151,13 +188,12 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         except:
             z = self(data.x, data.edge_index, None)
         y = data.y
+        y_pred = self._classification_head(z)
 
-        return z, y
+        return z, y, torch.argmax(y_pred.exp(), dim=1).detach().cpu().numpy() # type: ignore
 
     def _common_step(
-        self,
-        data: Data,
-        mask: torch.Tensor,
+        self, data: Data, mask: torch.Tensor, metric_average_types: List[str]
     ) -> Tuple[torch.Tensor, torch.Tensor, float]:
         """
         Common step for training, validation, and test steps.
@@ -176,14 +212,33 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         y_pred = self._classification_head(z)[mask]
         y = data.y[mask]
+        y_pred_b = torch.argmax(y_pred.exp(), dim=1)
+        metrics_dict = {}
+        for average in metric_average_types:
+            auc = roc_auc_score(
+                y_true=y.detach().cpu().numpy(),
+                y_score=y_pred[:, 1].exp().detach().cpu().numpy(),
+                multi_class="ovr",
+                average=average,
+            )
+            f1 = f1_score(
+                y.detach().cpu().numpy(), y_pred_b.cpu().numpy(), average=average
+            )
+            precision = precision_score(
+                y.detach().cpu().numpy(), y_pred_b.cpu().numpy(), average=average
+            )
+            recall = recall_score(
+                y.detach().cpu().numpy(), y_pred_b.cpu().numpy(), average=average
+            )
+            metrics_dict[f"auc_{average}"] = auc
+            metrics_dict[f"f1_{average}"] = f1
+            metrics_dict[f"precision_{average}"] = precision
+            metrics_dict[f"recall_{average}"] = recall
 
-        auc = roc_auc_score(
-            y_true=y.detach().cpu().numpy(),
-            y_score=y_pred.exp().detach().cpu().numpy(),
-            multi_class="ovr",
-        )
+        accuracy = accuracy_score(y.detach().cpu().numpy(), y_pred_b.cpu().numpy())
+        metrics_dict[f"accuracy_{average}"] = accuracy
 
-        return y_pred, y, auc
+        return y, y_pred, metrics_dict
 
     def configure_optimizers(self):
         """
@@ -194,11 +249,11 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         """
         return torch.optim.AdamW(
             params=self.parameters(),
-            lr=1e-3,
+            lr=self.lr,
             weight_decay=5e-4,
         )
 
-    def visualize_embeddings(z: torch.Tensor, y: torch.Tensor, n_components: int = 2) -> plt.figure:
+    def visualize_embeddings(z: torch.Tensor, y: torch.Tensor, n_components: int = 2):
         """
         Visualizes node embeddings using PCA, UMAP, and t-SNE.
 
@@ -206,9 +261,8 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
             z (torch.Tensor): Node embeddings.
             y (torch.Tensor): Ground truth labels.
             n_components (int): Number of components for dimensionality reduction (default: 2).
-        fig (plt.Figure): Matplotlib figure containing the scatter plots with node embeddings visualizations.
         """
-        
+
         z = z.to(device)
         y = y.to(device)
 
@@ -219,11 +273,29 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         z_tsne = tsne.fit_transform(z.cpu().numpy(), y.cpu().numpy())
 
         fig, axs = plt.subplots(ncols=3, figsize=(15, 5))
-        sns.scatterplot(x=z_PCA[:, 0], y=z_PCA[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[0])
+        sns.scatterplot(
+            x=z_PCA[:, 0], y=z_PCA[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[0]
+        )
         axs[0].set(title="PCA")
-        sns.scatterplot(x=z_UMAP[:, 0], y=z_UMAP[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[1])
+        sns.scatterplot(
+            x=z_UMAP[:, 0],
+            y=z_UMAP[:, 1],
+            hue=y.cpu().numpy(),
+            palette="Set2",
+            ax=axs[1],
+        )
         axs[1].set(title="UMAP")
-        sns.scatterplot(x=z_tsne[:, 0], y=z_tsne[:, 1], hue=y.cpu().numpy(), palette="Set2", ax=axs[2])
+        sns.scatterplot(
+            x=z_tsne[:, 0],
+            y=z_tsne[:, 1],
+            hue=y.cpu().numpy(),
+            palette="Set2",
+            ax=axs[2],
+        )
         axs[2].set(title="tsne")
 
-        return fig
+        plt.show()
+
+    def show_loss_plot(self):
+        plt.plot(range(self.trainer.current_epoch), self.train_losses)
+        plt.show()

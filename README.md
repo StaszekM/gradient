@@ -4,7 +4,9 @@ Project bootstrapped using Python `3.8.17` (default, Jun  6 2023, 20:10:50)
 [GCC 11.3.0] on linux WSL.
 
 Virtual environment and dependency management provided by an external container.
+Virtual environment and dependency management provided by an external container.
 
+Project bootstrap command below:
 Project bootstrap command below:
 
 ```console
@@ -58,16 +60,14 @@ After attaching VS Code, you can navigate in container's file system normally, r
 4. Python starts in container at `/` directory, so all relative imports from source code might not be found. If this is the case, for example in Jupyter, add cell with `os.chdir('/app')` to fix this.
 # Rules for commit and branch names
 
-Run the following command to inject our custom hooks into your local repo:
+# Set up your Docker env
 
-```bash
-cp -r ./githooks/. .git/hooks/
-```
+Docker image contains python3.8 set up on Ubuntu with NVIDIA, supplied with drivers to access host's CUDA if applicable. Tested only on Linux with NVIDIA GPU and WSL without NVIDIA GPU.
 
-These hooks control the naming of our branches and commits:
+## Install NVIDIA drivers bridge between Docker and Linux
 
-- Branch: `(task|story|bugfix|improvement|research)/GRA-[0-9]+ (your message)`
+Follow official documentation: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html
 
-- Commit msg: `GRA-[0-9]+ (your message)`
+UNAME=$(id -un) GID=$(id -g) USERID=$(id -u) docker compose up --force-recreate --build
 
 **Please verify that your local git hooks work**: try to create a branch with random name or try to commit with a random message in terminal and check if you receive an error message and commit does not occur.
