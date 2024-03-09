@@ -6,7 +6,10 @@ env/
 docker-compose.override.yml
 __pycache__
 lightning_logs/
-**/__pycache__/**
-*.py[cod]
-docker-compose.override.yml
-.vscode/
+data/organized-datasets/cache
+data/organized-datasets/files
+data/organized-datasets/hexes_cache
+data/organized-datasets/osm_cache
+data/organized-datasets/hex2vec_cache
+data/organized-datasets/osm_way_cache
+data/organized-datasets/highway2vec_cache
