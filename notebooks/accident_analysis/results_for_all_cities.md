@@ -136,6 +136,8 @@ H_path
 H_crossing
 A_parking
 A_bench
+
+Interpretacja długości słupków: im dłuższy słupek dla danej klasy, tym większy jest wpływ tej zmiennej na prognozy dla tej klasy. Przykładowo, jeśli długość słupka dla klasy 1 jest znacząco większa niż dla klasy 0 dla danej zmiennej, oznacza to, że ta zmienna ma większy wpływ na prognozy dla klasy 1 niż dla klasy 0. Natomiast jeśli długości słupków dla obu klas są zbliżone, może to oznaczać, że ta zmienna ma podobny wpływ na obie klasy.
  
 
 ## Statystyka lokalna I Morana
