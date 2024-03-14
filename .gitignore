@@ -13,3 +13,4 @@ data/organized-datasets/osm_cache
 data/organized-datasets/hex2vec_cache
 data/organized-datasets/osm_way_cache
 data/organized-datasets/highway2vec_cache
+notebooks/wandb
