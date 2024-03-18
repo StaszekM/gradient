@@ -11,7 +11,7 @@ class OSMEmbedderGraph:
         self,
         gdf: gpd.GeoDataFrame,
         labels_column_name: str,
-        weights_type: str = "neighboors",
+        weights_type: str = "neighbours",
     ):
         self.weights = weights_type
         self.gdf = gdf
@@ -24,8 +24,8 @@ class OSMEmbedderGraph:
 
     def createGraph_nx(self):
         assert (
-            self.weights in ["neighboors", "shortest_path", "centroid"]
-        ), f"Unknown weights_type: '{self.weights}'. Select one from ['neighboors', 'shortest_path', 'centroid']"
+            self.weights in ["neighbours", "shortest_path", "centroid"]
+        ), f"Unknown weights_type: '{self.weights}'. Select one from ['neighbours', 'shortest_path', 'centroid']"
 
         graph = nx.Graph()
 
@@ -94,16 +94,19 @@ class OSMEmbedderGraph:
     def graph_visualization(self):
         if self.graph_nx == None:
             self.createGraph_nx()
+            
+        fig, ax = plt.subplots()
 
         if self.weights == "centroid" or self.weights == "shortest_path":
             widths = list(nx.get_edge_attributes(self.graph_nx, "weight").values())
             max_width = max(widths)
             widths = [width / max_width for width in widths]
             nx.draw(self.graph_nx, node_size=30, node_color="plum", width=widths)
-            plt.show()
         else:
             nx.draw(self.graph_nx, node_size=30, node_color="plum", width=1)
-            plt.show()
+            
+        ax.set_title("Graph Visualization")
+        return fig
 
     def show_statistics(self):
         data = self.graph_data
@@ -113,14 +116,11 @@ class OSMEmbedderGraph:
             else data.num_nodes * (data.num_nodes - 1) // 2
         )
         edges = data.num_edges if data.is_directed() else data.num_edges // 2
-        print("Statistics:")
-        print("-" * 50)
-        print("Nodes: ", data.num_nodes)
-        print("Edges: ", edges)
-        print(
-            "Nodes dim: ", data.num_node_features
-        )  # wymiarowość atrybutów wierzchołków, czyli liczba cech wierzchołków
-        print("Nodes class", torch.unique(data.y).size(0))
-        print("Directed: ", data.is_directed())
-        print("Graph density: ", round((edges / (max_edges) * 100), 3), "%")
-        return
+        return {
+            "Nodes": data.num_nodes,
+            "Edges": edges,
+            "Nodes dim": data.num_node_features,
+            "Nodes class": torch.unique(data.y).size(0),
+            "Directed": data.is_directed(),
+            "Graph density [%]": round((edges / (max_edges) * 100), 3),
+        }
