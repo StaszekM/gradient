@@ -1,9 +1,7 @@
 import geopandas as gpd
 from torch_geometric.utils.convert import from_networkx
-import networkx as nx
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 import pandas as pd
 import osmnx as ox
 import math
@@ -140,8 +138,12 @@ class OSMnxGraph:
     
     
     def _get_edge_attrs(self):
-        """TODO: Write code for edge attributes out of gdf_edges"""
-        pass
+        """
+        Edge features out of osmnx.
+        """
+        result_df = self.gdf_edges.drop(['geometry', 'u', 'v', 'accidents_count', 'ref', 'width'], axis=1)
+        result_df.fillna('unknown', inplace=True)
+        return result_df
         
         
     def create_graph(self, aggregation_type):
@@ -156,8 +158,7 @@ class OSMnxGraph:
             features = self._get_node_features()
         if aggregation_type == "edge":
             pyg_graph.y = torch.tensor(self.gdf_edges['accidents_count'].values, dtype=torch.long)
-            # features = self._get_edge_attrs()
-            features = []
+            features = self._get_edge_attrs()
         pyg_graph.x = torch.tensor(features.values, dtype=torch.float32)
         self.graph_data = pyg_graph
         return pyg_graph
