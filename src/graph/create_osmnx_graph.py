@@ -180,15 +180,14 @@ class OSMnxGraph:
         data = self.graph_data
         max_edges = data.num_nodes * (data.num_nodes- 1) if data.is_directed() else data.num_nodes * (data.num_nodes - 1) // 2
         edges = data.num_edges if data.is_directed() else data.num_edges // 2
-        print("Statistics:")
-        print("-"*50)
-        print('Nodes: ', data.num_nodes)
-        print('Edges: ', edges)
-        print('Nodes dim: ', data.num_node_features) # wymiarowość atrybutów wierzchołków, czyli liczba cech wierzchołków
-        print('Nodes class', torch.unique(data.y).size(0))
-        print('Directed: ', data.is_directed())
-        print('Graph density: ', round((edges / (max_edges) * 100), 3), '%')
-        return
+        return {
+            "Nodes": data.num_nodes,
+            "Edges": edges,
+            "Nodes dim": data.num_node_features,
+            "Nodes class": torch.unique(data.y).size(0),
+            "Directed": data.is_directed(),
+            "Graph density [%]": round((edges / (max_edges) * 100), 3),
+        }
 
 
 
