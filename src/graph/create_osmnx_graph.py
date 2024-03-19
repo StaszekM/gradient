@@ -55,8 +55,26 @@ class OSMnxGraph:
         first_element = next(iter(sorted_dict.items()))
         return first_element[0]
     
-    def _aggregate_accidents(self):
-        self.gdf_nodes['accidents_count'] = 0
+    def _find_nearest_node(accident_point, edges):
+        distances = {}
+        for id, edge in zip(edges.index, edges):
+            distance = edge.distance(accident_point)
+            distances[id] = distance
+        sorted_dict = dict(sorted(distances.items(), key=lambda item: item[1]))
+        first_element = next(iter(sorted_dict.items()))
+        return first_element[0]
+    
+    def _aggregate_accidents(self, aggregation_type:str):
+        """
+        Aggregate accidents to node or egde.
+        """
+        if aggregation_type == "node":
+            self.gdf_nodes['accidents_count'] = 0
+        if aggregation_type == "edge":
+            self.gdf_edges['accidents_count'] = 0
+        else:
+            raise ValueError("Invalid aggregation_type. Choose either 'node' or 'edge'.")
+    
         square_edge_length = self.start_acc_distance
 
         # Iterate through accidents
@@ -67,23 +85,34 @@ class OSMnxGraph:
             square = box(square_W, square_S,
                         square_E, square_N)
             
-            # Check for nodes within the square
-            nodes_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
+            if aggregation_type == "node":
+                # Check for nodes within the square
+                nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
+            if aggregation_type == "edge":
+                # Check for edges within the square
+                nodes_or_edges_within_square = self.gdf_edges[self.gdf_edges.intersects(square)]
+
             
-            # If no nodes found, increase square size and repeat
-            while len(nodes_within_square) == 0:
+            # If no nodes/edges found, increase square size and repeat
+            while len(nodes_or_edges_within_square) == 0:
                 square_edge_length += 100
                 square_N, square_S, square_E, square_W = self._get_lat_lon_distance(accident_point.y, accident_point.x, square_edge_length/2)
                 square = box(square_W, square_S,
                             square_E, square_N)
+                
+                # Check for nodes/edges within the square
+                if aggregation_type == "node":
+                    nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
+                if aggregation_type == "edge":
+                    nodes_or_edges_within_square = self.gdf_edges[self.gdf_edges.intersects(square)]
             
-                nodes_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
-            
-            # Find nearest node within the square
-            nearest_osmid = self._find_nearest_node(accident_point,  nodes_within_square.geometry.apply(lambda x: np.array(x.xy).T[0]))
-            
-            # Update accidents_count column in gdf_nodes
-            self.gdf_nodes.at[nearest_osmid, 'accidents_count'] += 1
+            # Find nearest node within the square and update accidents_count column in gdf_nodes/edges
+            if aggregation_type == "node":
+                nearest_osmid = self._find_nearest_node(accident_point,  nodes_or_edges_within_square.geometry.apply(lambda x: np.array(x.xy).T[0]))
+                self.gdf_nodes.at[nearest_osmid, 'accidents_count'] += 1
+            if aggregation_type == "edge":
+                nearest_osmid = self._find_nearest_node(accident_point,  nodes_or_edges_within_square)
+                self.gdf_edges.at[nearest_osmid, 'accidents_count'] += 1
 
         # Reset square edge length for next iteration
             square_edge_length = self.start_acc_distance
@@ -115,15 +144,20 @@ class OSMnxGraph:
         pass
         
         
-    def create_graph(self):
-        self._aggregate_accidents()
+    def create_graph(self, aggregation_type):
+        self._aggregate_accidents(aggregation_type)
         self.gdf_nodes.fillna(0, inplace=True)
         self.gdf_edges.fillna(0, inplace=True)
         self.graph_nx = ox.graph_from_gdfs(self.gdf_nodes, self.gdf_edges)
         pyg_graph = from_networkx(self.graph_nx)
         # x and y are node attrs to assign edge attributes use 'pyg_graph.edge_attr'
-        pyg_graph.y = torch.tensor(self.gdf_nodes['accidents_count'].values, dtype=torch.long)
-        features = self._get_node_features()
+        if aggregation_type == "node":
+            pyg_graph.y = torch.tensor(self.gdf_nodes['accidents_count'].values, dtype=torch.long)
+            features = self._get_node_features()
+        if aggregation_type == "edge":
+            pyg_graph.y = torch.tensor(self.gdf_edges['accidents_count'].values, dtype=torch.long)
+            # features = self._get_edge_attrs()
+            features = []
         pyg_graph.x = torch.tensor(features.values, dtype=torch.float32)
         self.graph_data = pyg_graph
         return pyg_graph
