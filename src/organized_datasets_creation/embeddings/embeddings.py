@@ -36,6 +36,46 @@ def create_count_embedder_dataset(
     highway2vec_cache_folder: str,
     SEED: int = 42,
 ) -> Tuple[gpd.GeoDataFrame, pd.DataFrame, gpd.GeoDataFrame]:
+    """Creates full dataset with features provided by SRAI [CountEmbedder](https://kraina-ai.github.io/srai/0.7.0/api/embedders/CountEmbedder/).
+
+    The process of creating the dataset involves:
+    - loading hexes GeoDataFrame for given city and resolution (from cache if possible)
+    - loading OSM data for given city (from cache if possible)
+    - joining hexes with OSM data using SRAI [IntersectionJoiner](https://kraina-ai.github.io/srai/0.7.0/api/joiners/IntersectionJoiner/)
+    - creating features using CountEmbedder (with `count_subcategories=True`,
+        i.e. it will count each subcategory individually, e.g. 'amenity_parking' instead of grouping, e.g 'amenity')
+
+    Some parameters are unused, but are included for consistency with other functions in the module.
+
+    Parameters
+    ----------
+    nominatim_city_name : str
+        Name of the city that should comply to the Nominatim format.
+        For proper name resolution, use the `resolve_nominatim_city_name` function.
+        More info on Nominatim [here](https://nominatim.openstreetmap.org/ui/search.html).
+    resolution : int
+        H3 resolution (0-15). Tested on 6 through 11.
+    hexes_cache_folder : str
+        Location of folder where the function will look for existing hexes GeoDataFrames for this city and resolution.
+    osm_cache_folder : str
+        Location of folder where the function will look for existing OSM data for this city.
+    osm_way_cache_folder : str
+        Unused
+    hex2vec_cache_folder : str
+        Unused
+    highway2vec_cache_folder : str
+        Unused
+    SEED : int, optional
+        Unused
+
+    Returns
+    -------
+    Tuple[gpd.GeoDataFrame, pd.DataFrame, gpd.GeoDataFrame]
+        The tuple contains:
+        - hexes GeoDataFrame with geometries indexed by `region_id`
+        - embeddings DataFrame, indexed by `region_id`
+        - original OSM data GeoDataFrame
+    """
     hexes = create_hexes_gdf(nominatim_city_name, resolution, hexes_cache_folder)
     osm_data = load_osm_data(nominatim_city_name, osm_cache_folder)
 
@@ -58,6 +98,52 @@ def create_hex2vec_dataset(
     highway2vec_cache_folder: str,
     SEED: int = 42,
 ) -> Tuple[gpd.GeoDataFrame, pd.DataFrame, gpd.GeoDataFrame]:
+    """Creates full dataset with features provided by SRAI [Hex2VecEmbedder](https://kraina-ai.github.io/srai/0.7.0/api/embedders/Hex2VecEmbedder/).
+
+    The process of creating the dataset involves:
+    - loading hexes GeoDataFrame for given city and resolution (from cache if possible)
+    - loading OSM data for given city (from cache if possible)
+    - loading embeddings (from cache if possible)
+
+    If embeddings are not cached, the function will create them using Hex2VecEmbedder and cache them.
+
+    Parameters for the embedding process:
+    - encoder_sizes: `[15, 10]`
+    - max_epochs: `10`
+    - batch_size: `100`
+
+    Some parameters are unused, but are included for consistency with other functions in the module.
+
+    Parameters
+    ----------
+    nominatim_city_name : str
+        Name of the city that should comply to the Nominatim format.
+        For proper name resolution, use the `resolve_nominatim_city_name` function.
+        More info on Nominatim [here](https://nominatim.openstreetmap.org/ui/search.html).
+    resolution : int
+        H3 resolution (0-15). Tested on 6 through 11.
+    hexes_cache_folder : str
+        Location of folder where the function will look for existing hexes GeoDataFrames for this city and resolution.
+    osm_cache_folder : str
+        Location of folder where the function will look for existing OSM data for this city.
+    osm_way_cache_folder : str
+        Unused
+    hex2vec_cache_folder : str
+        Location of folder where the function will look for existing embeddings for this city and resolution.
+    highway2vec_cache_folder : str
+        Unused
+    SEED : int, optional
+        Seed passed to `torch_lightning.seed_everything()` before fitting embeddings, by default 42
+
+    Returns
+    -------
+    Tuple[gpd.GeoDataFrame, pd.DataFrame, gpd.GeoDataFrame]
+        The tuple contains:
+        - hexes GeoDataFrame with geometries indexed by `region_id`
+        - embeddings DataFrame, indexed by `region_id`
+          It contains embeddings columns with names `emb0`, `emb1` up to `emb9`, inclusive
+        - original OSM data GeoDataFrame
+    """
     hexes = create_hexes_gdf(nominatim_city_name, resolution, hexes_cache_folder)
     osm_data = load_osm_data(nominatim_city_name, osm_cache_folder)
 
@@ -118,6 +204,48 @@ def create_highway2vec_dataset(
     highway2vec_cache_folder: str,
     SEED: int = 42,
 ) -> Tuple[gpd.GeoDataFrame, pd.DataFrame, gpd.GeoDataFrame]:
+    """Creates full dataset with features provided by SRAI [Highway2VecEmbedder](https://kraina-ai.github.io/srai/0.7.0/api/embedders/Highway2VecEmbedder/).
+
+    The process of creating the dataset involves:
+    - loading hexes GeoDataFrame for given city and resolution (from cache if possible)
+    - loading OSM way data for given city (from cache if possible)
+    - loading embeddings (from cache if possible)
+
+    If embeddings are not cached, the function will create them using Highway2VecEmbedder and cache them.
+
+    Parameters for the embedding process are the same as in the original SRAI implementation of Hex2VecEmbedder.
+    Refer to the SRAI documentation to learn more about the parameters.
+
+    Parameters
+    ----------
+    nominatim_city_name : str
+        Name of the city that should comply to the Nominatim format.
+        For proper name resolution, use the `resolve_nominatim_city_name` function.
+        More info on Nominatim [here](https://nominatim.openstreetmap.org/ui/search.html).
+    resolution : int
+        H3 resolution (0-15). Tested on 6 through 11.
+    hexes_cache_folder : str
+        Location of folder where the function will look for existing hexes GeoDataFrames for this city and resolution.
+    osm_cache_folder : str
+        Unused
+    osm_way_cache_folder : str
+        Location of folder where the function will look for existing OSM way data for this city.
+    hex2vec_cache_folder : str
+        Unused
+    highway2vec_cache_folder : str
+        Location of folder where the function will look for existing embeddings for this city and resolution.
+    SEED : int, optional
+        Seed passed to `torch_lightning.seed_everything()` before fitting embeddings, by default 42
+
+    Returns
+    -------
+    Tuple[gpd.GeoDataFrame, pd.DataFrame, gpd.GeoDataFrame]
+        The tuple contains:
+        - hexes GeoDataFrame with geometries indexed by `region_id`
+        - embeddings DataFrame, indexed by `region_id`
+          It contains embeddings columns with names `emb0`, `emb1` up to `emb29`, inclusive
+        - original OSMNX way data GeoDataFrame
+    """
     hexes = create_hexes_gdf(nominatim_city_name, resolution, hexes_cache_folder)
     _, osm_way_edges_data = load_osm_way_data(nominatim_city_name, osm_way_cache_folder)
 
