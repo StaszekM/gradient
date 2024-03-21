@@ -1,8 +1,9 @@
 import os
 import papermill as pm
-from utils import (
-    convert_nominatim_name_to_filename,
+
+from src.organized_datasets_creation.utils import (
     resolve_nominatim_city_name,
+    convert_nominatim_name_to_filename,
 )
 
 
@@ -17,6 +18,7 @@ cities = [
 ]
 years = [2017, 2018, 2019, 2020, 2021, 2022]
 
+# modify this to your own absolute paths, make sure that strings point to organized_datasets and repository folders, respectively
 notebook_location = "/home/staszek/mgr/gradient/gradient/data/organized-datasets/"
 root_project_location = "/home/staszek/mgr/gradient/gradient/"
 

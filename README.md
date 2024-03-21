@@ -71,3 +71,14 @@ Follow official documentation: https://docs.nvidia.com/datacenter/cloud-native/c
 UNAME=$(id -un) GID=$(id -g) USERID=$(id -u) docker compose up --force-recreate --build
 
 **Please verify that your local git hooks work**: try to create a branch with random name or try to commit with a random message in terminal and check if you receive an error message and commit does not occur.
+
+# Download organized datasets
+
+The notebook at `data/organized-datasets/download.ipynb` can be used to recreate datasets if necessary (**attention: this process may last up to 48 hours!**).
+
+The notebook is executed with different parameters via [Papermill](https://github.com/nteract/papermill) and results in hierarchical folder structure.
+
+To run the notebook, open the `src/organized_datasets_creation/papermill_download.ipynb`, modify `notebook_location` and `root_project_location` variables, and run the following command:
+```bash
+python -m src.organized_datasets_creation.papermill_download
+```
