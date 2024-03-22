@@ -23,6 +23,69 @@ class OSMnxGraph:
         self.start_acc_distance = start_acc_distance
         self.graph_nx = None
         self.graph_data = None
+
+
+    
+    def get_node_attrs(self):
+        """
+        Node features out of osmnx. Could be replaced with custom features
+        """
+        attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', 'accidents_count', 'ref'], axis=1)
+        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
+        vectorizer = CountVectorizer()
+
+        # Fit and transform the text data
+        X = vectorizer.fit_transform(attrs['highway'])
+        df_count = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
+        df_count['index'] = attrs.index
+        df_count.set_index("index", inplace = True)
+        result_df = pd.merge(attrs, df_count, left_index=True, right_index=True)
+        result_df.fillna(0, inplace=True)
+        result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
+        return result_df
+    
+    
+    def get_edge_attrs(self):
+        """
+        Edge attributes out of osmnx.
+        """
+        result_df = self.gdf_edges.drop(['geometry', 'u', 'v', 'accidents_count', 'ref', 'width'], axis=1)
+        result_df.fillna('unknown', inplace=True)
+        return result_df
+        
+        
+    def create_graph(self, aggregation_type, normalize_y=True):
+        self._aggregate_accidents(aggregation_type)
+        self.gdf_nodes.fillna(0, inplace=True)
+        self.gdf_edges.fillna(0, inplace=True)
+        self.graph_nx = ox.graph_from_gdfs(self.gdf_nodes, self.gdf_edges)
+        pyg_graph = from_networkx(self.graph_nx)
+        # x and y are node attrs to assign edge attributes use 'pyg_graph.edge_attr'
+        if aggregation_type == "node":
+            pyg_graph.y = torch.tensor(self.gdf_nodes['accidents_count'].values, dtype=torch.long)
+            attrs = self.get_node_attrs()
+        elif aggregation_type == "edge":
+            pyg_graph.y = torch.tensor(self.gdf_edges['accidents_count'].values, dtype=torch.long)
+            attrs = self.get_edge_attrs()
+        if normalize_y:
+                pyg_graph.y = torch.where(pyg_graph.y > 0, torch.ones_like(pyg_graph.y), torch.zeros_like(pyg_graph.y))
+        pyg_graph.x = torch.tensor(attrs.values, dtype=torch.float32)
+        self.graph_data = pyg_graph
+        return pyg_graph
+        
+    
+    def show_statistics(self):
+        data = self.graph_data
+        max_edges = data.num_nodes * (data.num_nodes- 1) if data.is_directed() else data.num_nodes * (data.num_nodes - 1) // 2
+        edges = data.num_edges if data.is_directed() else data.num_edges // 2
+        return {
+            "Nodes": data.num_nodes,
+            "Edges": edges,
+            "Nodes dim": data.num_node_features,
+            "Nodes class": torch.unique(data.y).size(0),
+            "Directed": data.is_directed(),
+            "Graph density [%]": round((edges / (max_edges) * 100), 3),
+        }
     
 
     def _get_lat_lon_distance(self, lat, lon, meters):
@@ -46,6 +109,8 @@ class OSMnxGraph:
     def _find_nearest_node(self, accident_point, nodes):
         accident_point = np.array(accident_point.xy).T[0]
         distances = {}
+        # przepuścić naraz cały df zamiast w pętli 1 acc point vs wszsytkie nody
+        # jak sie nie będzie zgadzać wymiarowość to wypełnić kolumnę tym accidentem
         for id, node in zip(nodes.index, nodes):
             distance = cdist([accident_point], [node])
             distances[id] = distance
@@ -53,7 +118,7 @@ class OSMnxGraph:
         first_element = next(iter(sorted_dict.items()))
         return first_element[0]
     
-    def _find_nearest_node(accident_point, edges):
+    def _find_nearest_edge(accident_point, edges):
         distances = {}
         for id, edge in zip(edges.index, edges):
             distance = edge.distance(accident_point)
@@ -68,7 +133,7 @@ class OSMnxGraph:
         """
         if aggregation_type == "node":
             self.gdf_nodes['accidents_count'] = 0
-        if aggregation_type == "edge":
+        elif aggregation_type == "edge":
             self.gdf_edges['accidents_count'] = 0
         else:
             raise ValueError("Invalid aggregation_type. Choose either 'node' or 'edge'.")
@@ -86,7 +151,7 @@ class OSMnxGraph:
             if aggregation_type == "node":
                 # Check for nodes within the square
                 nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
-            if aggregation_type == "edge":
+            elif aggregation_type == "edge":
                 # Check for edges within the square
                 nodes_or_edges_within_square = self.gdf_edges[self.gdf_edges.intersects(square)]
 
@@ -101,93 +166,22 @@ class OSMnxGraph:
                 # Check for nodes/edges within the square
                 if aggregation_type == "node":
                     nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
-                if aggregation_type == "edge":
+                elif aggregation_type == "edge":
                     nodes_or_edges_within_square = self.gdf_edges[self.gdf_edges.intersects(square)]
             
             # Find nearest node within the square and update accidents_count column in gdf_nodes/edges
             if aggregation_type == "node":
                 nearest_osmid = self._find_nearest_node(accident_point,  nodes_or_edges_within_square.geometry.apply(lambda x: np.array(x.xy).T[0]))
                 self.gdf_nodes.at[nearest_osmid, 'accidents_count'] += 1
-            if aggregation_type == "edge":
-                nearest_osmid = self._find_nearest_node(accident_point,  nodes_or_edges_within_square)
+            elif aggregation_type == "edge":
+                nearest_osmid = self._find_nearest_edge(accident_point,  nodes_or_edges_within_square)
                 self.gdf_edges.at[nearest_osmid, 'accidents_count'] += 1
 
         # Reset square edge length for next iteration
             square_edge_length = self.start_acc_distance
     
     
-    def _get_node_features(self):
-        """
-        Node features out of osmnx. Could be replaced with custom features
-        """
-        features = self.gdf_nodes.drop(['geometry', 'x', 'y', 'accidents_count', 'ref'], axis=1)
-        features['highway'] = features['highway'].replace(0, 'unknown')
-        vectorizer = CountVectorizer()
-
-        # Fit and transform the text data
-        X = vectorizer.fit_transform(features['highway'])
-
-        # Convert the result to a DataFrame
-        df_count = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
-
-        # Concatenate with original DataFrame if necessary
-        result_df = pd.concat([features, df_count], axis=1)
-        result_df.fillna(0, inplace=True)
-        result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
-        return result_df
     
-    
-    def _get_edge_attrs(self):
-        """
-        Edge features out of osmnx.
-        """
-        result_df = self.gdf_edges.drop(['geometry', 'u', 'v', 'accidents_count', 'ref', 'width'], axis=1)
-        result_df.fillna('unknown', inplace=True)
-        return result_df
-        
-        
-    def create_graph(self, aggregation_type):
-        self._aggregate_accidents(aggregation_type)
-        self.gdf_nodes.fillna(0, inplace=True)
-        self.gdf_edges.fillna(0, inplace=True)
-        self.graph_nx = ox.graph_from_gdfs(self.gdf_nodes, self.gdf_edges)
-        pyg_graph = from_networkx(self.graph_nx)
-        # x and y are node attrs to assign edge attributes use 'pyg_graph.edge_attr'
-        if aggregation_type == "node":
-            pyg_graph.y = torch.tensor(self.gdf_nodes['accidents_count'].values, dtype=torch.long)
-            features = self._get_node_features()
-        if aggregation_type == "edge":
-            pyg_graph.y = torch.tensor(self.gdf_edges['accidents_count'].values, dtype=torch.long)
-            features = self._get_edge_attrs()
-        pyg_graph.x = torch.tensor(features.values, dtype=torch.float32)
-        self.graph_data = pyg_graph
-        return pyg_graph
-        
-    
-    # def graph_visualization(self):
-    #     if self.graph_nx == None:
-    #         self.createGraph_nx()
-        
-    #     if self.weights=='centroid' or self.weights=='shortest_path':
-    #         width = list(nx.get_edge_attributes(self.graph_nx, 'weight').values())
-    #         nx.draw(self.graph_nx, node_size=30, node_color='plum', width=width)
-    #         plt.show()
-    #     else:
-    #         nx.draw(self.graph_nx, node_size=30, node_color='plum', width=width)
-    #         plt.show()
-    
-    def show_statistics(self):
-        data = self.graph_data
-        max_edges = data.num_nodes * (data.num_nodes- 1) if data.is_directed() else data.num_nodes * (data.num_nodes - 1) // 2
-        edges = data.num_edges if data.is_directed() else data.num_edges // 2
-        return {
-            "Nodes": data.num_nodes,
-            "Edges": edges,
-            "Nodes dim": data.num_node_features,
-            "Nodes class": torch.unique(data.y).size(0),
-            "Directed": data.is_directed(),
-            "Graph density [%]": round((edges / (max_edges) * 100), 3),
-        }
 
 
 
