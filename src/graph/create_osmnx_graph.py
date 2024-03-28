@@ -9,6 +9,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
 from shapely.geometry import box
 from scipy.spatial.distance import cdist
+from typing import Union, Literal
 
 class OSMnxGraph:
     def __init__(self, gdf_accidents: gpd.GeoDataFrame, 
@@ -105,6 +106,9 @@ class OSMnxGraph:
         
         return new_latitude_N, new_latitude_S, new_longitude_W, new_longitude_E
     
+    def _calculate_distance(self, coord1, coord2):
+        return cdist([coord1], [coord2])[0, 0]
+    
     
     def _find_nearest_node(self, accident_point, nodes):
         accident_point = np.array(accident_point.xy).T[0]
@@ -116,7 +120,30 @@ class OSMnxGraph:
             distances[id] = distance
         sorted_dict = dict(sorted(distances.items(), key=lambda item: item[1]))
         first_element = next(iter(sorted_dict.items()))
-        return first_element[0]
+        print(first_element[0])
+        print(nodes)
+        accident_series = pd.Series([accident_point] * len(nodes), index=nodes.index)
+
+        dd = nodes.combine(accident_series, self._calculate_distance)
+        print("abcd")
+        print(dd)
+        print(type(dd))
+
+        # Get the indices of the sorted distances
+        sorted_d = dd.to_frame().sort_values(by=0)
+        print(sorted_d[0])
+        print(type(sorted_d))
+
+        # Get the ID of the first element (closest node)
+        first= sorted_d.iloc[0]
+        print(first)
+        print(type(first))
+
+        # Get the distance to the first element
+        # first_distance = distances[0, first_id]
+        # print(first_distance)
+        return first
+        #return first_element[0]
     
     def _find_nearest_edge(accident_point, edges):
         distances = {}
@@ -127,7 +154,7 @@ class OSMnxGraph:
         first_element = next(iter(sorted_dict.items()))
         return first_element[0]
     
-    def _aggregate_accidents(self, aggregation_type:str):
+    def _aggregate_accidents(self, aggregation_type: Union[Literal["node"], Literal["edge"]]):
         """
         Aggregate accidents to node or egde.
         """
