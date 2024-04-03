@@ -50,7 +50,20 @@ class OSMnxGraph:
         """
         Edge attributes out of osmnx.
         """
-        result_df = self.gdf_edges.drop(['geometry', 'u', 'v', 'accidents_count', 'ref', 'width'], axis=1)
+        attrs = self.gdf_edges.drop(['geometry', 'accidents_count', 'ref', 'name'], axis=1)
+
+        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
+        vectorizer = CountVectorizer()
+
+        # Fit and transform the text data
+        X = vectorizer.fit_transform(attrs['highway'])
+        df_count = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
+        df_count['index'] = attrs.index
+        df_count.set_index("index", inplace = True)
+        result_df = pd.merge(attrs, df_count, left_index=True, right_index=True)
+        result_df.fillna(0, inplace=True)
+        result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
+        
         result_df.fillna('unknown', inplace=True)
         return result_df
         
@@ -112,47 +125,29 @@ class OSMnxGraph:
     
     def _find_nearest_node(self, accident_point, nodes):
         accident_point = np.array(accident_point.xy).T[0]
-        distances = {}
-        # przepuścić naraz cały df zamiast w pętli 1 acc point vs wszsytkie nody
-        # jak sie nie będzie zgadzać wymiarowość to wypełnić kolumnę tym accidentem
-        for id, node in zip(nodes.index, nodes):
-            distance = cdist([accident_point], [node])
-            distances[id] = distance
-        sorted_dict = dict(sorted(distances.items(), key=lambda item: item[1]))
-        first_element = next(iter(sorted_dict.items()))
-        print(first_element[0])
-        print(nodes)
         accident_series = pd.Series([accident_point] * len(nodes), index=nodes.index)
-
-        dd = nodes.combine(accident_series, self._calculate_distance)
-        print("abcd")
-        print(dd)
-        print(type(dd))
-
-        # Get the indices of the sorted distances
-        sorted_d = dd.to_frame().sort_values(by=0)
-        print(sorted_d[0])
-        print(type(sorted_d))
-
-        # Get the ID of the first element (closest node)
-        first= sorted_d.iloc[0]
-        print(first)
-        print(type(first))
-
-        # Get the distance to the first element
-        # first_distance = distances[0, first_id]
-        # print(first_distance)
-        return first
-        #return first_element[0]
+        sorted_nodes = nodes.combine(accident_series, self._calculate_distance).sort_values()
+        first_dist_osmid = sorted_nodes.index[0]
+        return first_dist_osmid
     
-    def _find_nearest_edge(accident_point, edges):
-        distances = {}
-        for id, edge in zip(edges.index, edges):
-            distance = edge.distance(accident_point)
-            distances[id] = distance
-        sorted_dict = dict(sorted(distances.items(), key=lambda item: item[1]))
-        first_element = next(iter(sorted_dict.items()))
-        return first_element[0]
+    def _find_nearest_edge(self, accident_point, edges):
+        def _calculate_edge_distance(edge, accident_point):
+            return edge.distance(accident_point)
+        
+        accident_series = pd.Series([accident_point] * len(edges), index=edges.index)
+        sorted_edges = edges.combine(accident_series, _calculate_edge_distance).sort_values()
+        first_dist_osmid = sorted_edges.index[0]
+        # distances = {}
+        # print(type(edges))
+        # print(edges.iloc[0])
+        # for id, edge in zip(edges.index, edges):
+        #     print(type(edge))
+        #     print(edge)
+        #     distance = edge.distance(accident_point)
+        #     distances[id] = distance
+        # sorted_dict = dict(sorted(distances.items(), key=lambda item: item[1]))
+        # first_element = next(iter(sorted_dict.items()))
+        return first_dist_osmid
     
     def _aggregate_accidents(self, aggregation_type: Union[Literal["node"], Literal["edge"]]):
         """
@@ -201,7 +196,7 @@ class OSMnxGraph:
                 nearest_osmid = self._find_nearest_node(accident_point,  nodes_or_edges_within_square.geometry.apply(lambda x: np.array(x.xy).T[0]))
                 self.gdf_nodes.at[nearest_osmid, 'accidents_count'] += 1
             elif aggregation_type == "edge":
-                nearest_osmid = self._find_nearest_edge(accident_point,  nodes_or_edges_within_square)
+                nearest_osmid = self._find_nearest_edge(accident_point,  nodes_or_edges_within_square.geometry)
                 self.gdf_edges.at[nearest_osmid, 'accidents_count'] += 1
 
         # Reset square edge length for next iteration
