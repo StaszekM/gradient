@@ -6,6 +6,7 @@ import h3
 import pandas as pd
 from shapely.geometry import LineString
 from shapely.geometry.base import BaseGeometry
+from pandas._typing import AggFuncType
 
 
 class SourceType(Enum):
@@ -14,7 +15,6 @@ class SourceType(Enum):
 
 
 class GraphLayerController:
-
     def __init__(
         self,
         hexes_gdf: gpd.GeoDataFrame,
@@ -27,17 +27,17 @@ class GraphLayerController:
         self.osmnx_nodes_gdf = osmnx_nodes_gdf
         self.osmnx_edges_gdf = osmnx_edges_gdf
 
-        self._h3_neighbourhood = H3Neighbourhood(self.hexes_gdf)
-        self._hexes_centroids_gdf = gpd.GeoDataFrame(
-            hexes_gdf.centroid, columns=["centroid_geometry"]
-        )
+        self.reset_state()
 
-        self._virtual_edges_dfs_cache: Dict[SourceType, gpd.GeoDataFrame] = dict()
-        self._edges_between_hexes_cache: Dict[int, pd.DataFrame] = dict()
-        self._hex_resolution = self._get_unique_resolutions(hexes_gdf).item()
-        self._virtual_linestrings_cache: Dict[SourceType, gpd.GeoDataFrame] = dict()
+    @property
+    def hex_resolution(self) -> int:
+        return self._hex_resolution
 
-    def get_virtual_edges_to_hexes(self, source: SourceType) -> gpd.GeoDataFrame:
+    @property
+    def hexes_centroids_gdf(self) -> gpd.GeoDataFrame:
+        return self._hexes_centroids_gdf
+
+    def get_virtual_edges_to_hexes(self, source: SourceType) -> pd.DataFrame:
         if source in self._virtual_edges_dfs_cache:
             return self._virtual_edges_dfs_cache[source]
 
@@ -136,6 +136,10 @@ class GraphLayerController:
 
         virtual_edges_df = self.get_virtual_edges_to_hexes(source=source)
 
+        edge_attr_columns = virtual_edges_df.columns[
+            ~virtual_edges_df.columns.isin(["region_id", "source_id"])
+        ]
+
         merged = virtual_edges_df.merge(
             self._hexes_centroids_gdf, left_on="region_id", right_index=True
         ).merge(source_gdf[["geometry"]], left_on="source_id", right_index=True)
@@ -144,7 +148,7 @@ class GraphLayerController:
         merged["virtual_edge"] = gpd.GeoSeries(virtual_edge_geometry)
 
         result = gpd.GeoDataFrame(
-            merged[["region_id", "source_id", "virtual_edge"]],
+            merged[["region_id", "source_id", "virtual_edge", *edge_attr_columns]],
             geometry="virtual_edge",
             crs=self.hexes_gdf.crs,
         )  # type: ignore
@@ -178,6 +182,55 @@ class GraphLayerController:
             geometry="edge",
             crs=self.hexes_gdf.crs,
         )  # type: ignore
+
+    def patch_virtual_edges_with_mapper_fn(
+        self,
+        mapper_fn: AggFuncType,
+        source: SourceType,
+    ) -> None:
+        virtual_edges_df = self.get_virtual_edges_to_hexes(source=source)
+
+        source_gdf = (
+            self.osmnx_nodes_gdf
+            if source == SourceType.OSMNX_NODES
+            else self.osmnx_edges_gdf
+        )
+
+        merged = virtual_edges_df.merge(
+            source_gdf.rename(
+                columns={col: f"source_{col}" for col in source_gdf.columns}
+            ),
+            left_on="source_id",
+            right_index=True,
+        ).merge(
+            self.hexes_gdf.rename(
+                columns={col: f"region_{col}" for col in self.hexes_gdf.columns}
+            ),
+            left_on="region_id",
+            right_index=True,
+        )
+
+        aggr_columns = merged[
+            merged.columns[~merged.columns.isin(["source_id", "region_id"])]
+        ].apply(func=mapper_fn, axis=1, result_type="expand")
+
+        aggr_columns.rename(
+            columns={col: f"edge_emb_{col}" for col in aggr_columns.columns},
+            inplace=True,
+        )
+
+        self._virtual_edges_dfs_cache[source] = merged.drop(
+            columns=merged.columns[~merged.columns.isin(["source_id", "region_id"])]
+        ).join(aggr_columns)
+
+    def reset_state(self):
+        self._h3_neighbourhood = H3Neighbourhood(self.hexes_gdf)
+        self._hexes_centroids_gdf = self._create_hexes_centroids_gdf()
+
+        self._virtual_edges_dfs_cache: Dict[SourceType, pd.DataFrame] = dict()
+        self._edges_between_hexes_cache: Dict[int, pd.DataFrame] = dict()
+        self._hex_resolution = self._get_unique_resolutions(self.hexes_gdf).item()
+        self._virtual_linestrings_cache: Dict[SourceType, gpd.GeoDataFrame] = dict()
 
     def _assert_constructor_args(
         self,
@@ -216,3 +269,25 @@ class GraphLayerController:
         hexes_gdf: gpd.GeoDataFrame,
     ):
         return hexes_gdf.index.map(h3.get_resolution).unique()
+
+    def _create_hexes_centroids_gdf(
+        self, copy_features: bool = True
+    ) -> gpd.GeoDataFrame:
+        centroid_gdf = gpd.GeoDataFrame(
+            self.hexes_gdf.centroid, columns=["centroid_geometry"]
+        )
+
+        if copy_features:
+            return gpd.GeoDataFrame(
+                centroid_gdf.merge(
+                    self.hexes_gdf[
+                        self.hexes_gdf.columns[self.hexes_gdf.columns != "geometry"]
+                    ],
+                    left_index=True,
+                    right_index=True,
+                ),
+                crs=self.hexes_gdf.crs,
+                geometry="centroid_geometry",
+            )  # type: ignore
+
+        return centroid_gdf
