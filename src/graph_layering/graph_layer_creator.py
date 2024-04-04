@@ -14,6 +14,10 @@ class SourceType(Enum):
     OSMNX_EDGES = "osmnx_edges"
 
 
+def _is_natural_0_n(index: pd.Index) -> bool:
+    return index.equals(pd.Index(range(len(index))))
+
+
 class GraphLayerController:
     def __init__(
         self,
@@ -82,8 +86,8 @@ class GraphLayerController:
         result = (
             pd.DataFrame(
                 {
-                    "u": self.hexes_gdf.index,
-                    "v": self.hexes_gdf.index.map(v_finder),
+                    "u": self.hexes_gdf["h3_id"],
+                    "v": self.hexes_gdf["h3_id"].map(v_finder),
                 },
             )
             .explode(column="v")
@@ -159,11 +163,12 @@ class GraphLayerController:
 
     def get_virtual_linestrings_between_centroids(self, k_distance: int = 1):
         hexes_edges_gdf = self.get_edges_between_hexes(k_distance=k_distance)
+
         merged = (
             hexes_edges_gdf.merge(
-                self._hexes_centroids_gdf, left_on="u", right_index=True
+                self._hexes_centroids_gdf, left_on="u", right_on="h3_id"
             )
-            .merge(self._hexes_centroids_gdf, left_on="v", right_index=True)
+            .merge(self._hexes_centroids_gdf, left_on="v", right_on="h3_id")
             .rename(
                 columns=dict(
                     centroid_geometry_x="u_geometry", centroid_geometry_y="v_geometry"
@@ -224,7 +229,9 @@ class GraphLayerController:
         ).join(aggr_columns)
 
     def reset_state(self):
-        self._h3_neighbourhood = H3Neighbourhood(self.hexes_gdf)
+        self._h3_neighbourhood = H3Neighbourhood(
+            gpd.GeoDataFrame(index=self.hexes_gdf["h3_id"])
+        )
         self._hexes_centroids_gdf = self._create_hexes_centroids_gdf()
 
         self._virtual_edges_dfs_cache: Dict[SourceType, pd.DataFrame] = dict()
@@ -238,13 +245,37 @@ class GraphLayerController:
         osmnx_nodes_gdf: gpd.GeoDataFrame,
         osmnx_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
+        hexes_gdf_index = hexes_gdf.index
+        osmnx_nodes_gdf_index = osmnx_nodes_gdf.index
+        osmnx_edges_gdf_index = osmnx_edges_gdf.index
+
+        assert _is_natural_0_n(
+            hexes_gdf_index
+        ), f"GraphLayerController: Expected natural 0-n index in hexes_gdf, got {', '.join(hexes_gdf_index[0:5])}..."
+
+        assert _is_natural_0_n(
+            osmnx_nodes_gdf_index
+        ), f"GraphLayerController: Expected natural 0-n index in osmnx_nodes_gdf, got {', '.join(osmnx_nodes_gdf_index[0:5])}..."
+
+        assert _is_natural_0_n(
+            osmnx_edges_gdf_index
+        ), f"GraphLayerController: Expected natural 0-n index in osmnx_edges_gdf, got {', '.join(osmnx_edges_gdf_index[0:5])}..."
+
         assert (
             hexes_gdf.index.name == "region_id"
         ), f"GraphLayerController: Expected 'region_id' as index name in hexes_gdf, got {hexes_gdf.index.name}"
 
         assert (
-            osmnx_nodes_gdf.index.name == "osmid"
-        ), f"GraphLayerController: Expected 'osmid' as index name in osmnx_nodes_gdf, got {osmnx_nodes_gdf.index.name}"
+            "h3_id" in hexes_gdf.columns
+        ), f"GraphLayerController: Expected 'h3_id' column in hexes_gdf, got {hexes_gdf.columns}"
+
+        assert (
+            osmnx_nodes_gdf.index.name == "node_id"
+        ), f"GraphLayerController: Expected 'node_id' as index name in osmnx_nodes_gdf, got {osmnx_nodes_gdf.index.name}"
+
+        assert (
+            "osmid" in osmnx_nodes_gdf.columns
+        ), f"GraphLayerController: Expected 'osmid' column in osmnx_nodes_gdf, got {osmnx_nodes_gdf.columns}"
 
         assert (
             "x" in osmnx_nodes_gdf.columns and "y" in osmnx_nodes_gdf.columns
@@ -268,7 +299,7 @@ class GraphLayerController:
         self,
         hexes_gdf: gpd.GeoDataFrame,
     ):
-        return hexes_gdf.index.map(h3.get_resolution).unique()
+        return hexes_gdf["h3_id"].map(h3.get_resolution).unique()
 
     def _create_hexes_centroids_gdf(
         self, copy_features: bool = True
