@@ -32,8 +32,8 @@ class OSMnxGraph:
         Node features out of osmnx. Could be replaced with custom features
         """
         attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', 'accidents_count', 'ref'], axis=1)
-        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
-        vectorizer = CountVectorizer()
+        attrs['highway'] = attrs['highway'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+        vectorizer = CountVectorizer(tokenizer=lambda x: x.split())
 
         # Fit and transform the text data
         X = vectorizer.fit_transform(attrs['highway'])
@@ -137,16 +137,6 @@ class OSMnxGraph:
         accident_series = pd.Series([accident_point] * len(edges), index=edges.index)
         sorted_edges = edges.combine(accident_series, _calculate_edge_distance).sort_values()
         first_dist_osmid = sorted_edges.index[0]
-        # distances = {}
-        # print(type(edges))
-        # print(edges.iloc[0])
-        # for id, edge in zip(edges.index, edges):
-        #     print(type(edge))
-        #     print(edge)
-        #     distance = edge.distance(accident_point)
-        #     distances[id] = distance
-        # sorted_dict = dict(sorted(distances.items(), key=lambda item: item[1]))
-        # first_element = next(iter(sorted_dict.items()))
         return first_dist_osmid
     
     def _aggregate_accidents(self, aggregation_type: Union[Literal["node"], Literal["edge"]]):
