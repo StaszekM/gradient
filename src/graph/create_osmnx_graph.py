@@ -32,7 +32,7 @@ class OSMnxGraph:
         Node features out of osmnx. Could be replaced with custom features
         """
         attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', 'accidents_count', 'ref'], axis=1)
-        attrs['highway'] = attrs['highway'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
         vectorizer = CountVectorizer(tokenizer=lambda x: x.split())
 
         # Fit and transform the text data
@@ -45,30 +45,58 @@ class OSMnxGraph:
         result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
         return result_df
     
-    
+
+
     def get_edge_attrs(self):
         """
         Edge attributes out of osmnx.
         """
-        attrs = self.gdf_edges.drop(['geometry', 'accidents_count', 'ref', 'name'], axis=1)
+        attrs = self.gdf_edges
+        attrs.replace('NaN', np.nan, inplace=True)
+        attrs['maxspeed'] = attrs['maxspeed'].fillna(50)
+        attrs['width'] = pd.to_numeric(attrs['width'], errors='coerce').fillna(2.0).astype(float)
+        attrs['lanes'] = attrs['lanes'].fillna(2)
+        attrs = attrs.drop(['ref', 'name'], axis=1)
+        attrs = attrs.fillna("unspecified")
+        attrs['lanes'] = attrs['lanes'].apply(lambda x: self._get_first_element(x)).astype(int)
+        attrs['reversed'] = attrs['reversed'].apply(lambda x: self._get_first_element(x))
+        attrs['maxspeed'] = pd.to_numeric(attrs['maxspeed'].apply(lambda x: self._get_first_element(x)), errors='coerce').fillna(50).astype(int)
+        attrs['reversed'] = attrs['reversed'].map({True: 1, False: 0}).astype(int)
+        attrs['oneway'] = attrs['oneway'].map({True: 1, False: 0}).astype(int)
+        vect = CountVectorizer(tokenizer=lambda x: x.split())
+        result_df = attrs
+        for col in ['highway', 'junction', 'bridge', 'tunnel']:
+            attrs[col] = attrs[col].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+            X2 = vect.fit_transform(attrs[col])
+            df_count2 = pd.DataFrame(X2.toarray(), columns=vect.get_feature_names_out())
+            df_count2['index'] = attrs.index
+            df_count2.set_index("index", inplace = True)
+            new_index_tuples = [(u, v, x) for u, v, x in attrs.index]
+            new_index = pd.MultiIndex.from_tuples(new_index_tuples, names=['u', 'v', 'key'])
+            df_count2.index = new_index
+            df_count2 = df_count2.rename(columns={col_nm: col + "_"+ col_nm for col_nm in df_count2.columns})
+            result_df = pd.merge(result_df, df_count2, left_index=True, right_index=True)
+        result_df = result_df.drop(['highway','access', 'junction', 'bridge', 'tunnel'], axis=1)
+        # attrs = self.gdf_edges.drop(['geometry', 'accidents_count', 'ref', 'name'], axis=1)
+        # attrs['highway'] = attrs['highway'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+        # attrs['highway'] = attrs['highway'].replace(0, 'unknown')
+        # vectorizer = CountVectorizer()
 
-        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
-        vectorizer = CountVectorizer()
-
-        # Fit and transform the text data
-        X = vectorizer.fit_transform(attrs['highway'])
-        df_count = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
-        df_count['index'] = attrs.index
-        df_count.set_index("index", inplace = True)
-        result_df = pd.merge(attrs, df_count, left_index=True, right_index=True)
-        result_df.fillna(0, inplace=True)
-        result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
+        # # Fit and transform the text data
+        # X = vectorizer.fit_transform(attrs['highway'])
+        # df_count = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
+        # df_count['index'] = attrs.index
+        # df_count.set_index("index", inplace = True)
+        # result_df = pd.merge(attrs, df_count, left_index=True, right_index=True)
+        # result_df.fillna(0, inplace=True)
+        # result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
         
-        result_df.fillna('unknown', inplace=True)
+        # result_df.fillna('unknown', inplace=True)
         return result_df
         
         
     def create_graph(self, aggregation_type, normalize_y=True):
+        attrs = self.get_edge_attrs()
         self._aggregate_accidents(aggregation_type)
         self.gdf_nodes.fillna(0, inplace=True)
         self.gdf_edges.fillna(0, inplace=True)
@@ -193,7 +221,13 @@ class OSMnxGraph:
             square_edge_length = self.start_acc_distance
     
     
-    
+    def _get_first_element(self, lst):
+        if isinstance(lst, list):
+            return lst[0]
+        else:
+            return lst
+        
+
 
 
 
