@@ -107,7 +107,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
         self.log("step", self.trainer.current_epoch)
         self.log("train/loss", loss.item(), on_epoch=True, on_step=False)
         # self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
-
+        print(f"loss: {loss.item()}")
         self.train_losses.append(np.mean(loss.item()))
 
         return loss
