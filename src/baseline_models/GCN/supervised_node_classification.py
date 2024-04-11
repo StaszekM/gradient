@@ -106,8 +106,6 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         self.log("step", self.trainer.current_epoch)
         self.log("train/loss", loss.item(), on_epoch=True, on_step=False)
-        # self.log("train/auc", auc.item(), on_epoch=True, on_step=False)
-
         self.train_losses.append(np.mean(loss.item()))
 
         return loss
@@ -169,7 +167,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
                 f"test/{metric}", metrics_dict[metric], on_epoch=True, on_step=False
             )
 
-        # return y_true, y_pred
+        return y_true, y_pred
 
     def predict_step(
         self, batch: List[Data], batch_idx: int, dataloader_idx: Optional[int] = None
@@ -277,7 +275,7 @@ class SupervisedNodeClassificationGNN(pl.LightningModule):
 
         z_tsne = tsne.fit_transform(z, y)
 
-        fig, axs = plt.subplots(ncols=3, figsize=(15, 5))
+        _, axs = plt.subplots(ncols=3, figsize=(15, 5))
         sns.scatterplot(
             x=z_PCA[:, 0], y=z_PCA[:, 1], hue=y, palette="Set2", ax=axs[0]
         )
