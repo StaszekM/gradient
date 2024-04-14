@@ -124,3 +124,4 @@ class OSMEmbedderGraph:
             "Directed": data.is_directed(),
             "Graph density [%]": round((edges / (max_edges) * 100), 3),
         }
+
