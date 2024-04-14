@@ -28,11 +28,13 @@ class OSMnxGraph:
 
     
     def get_node_attrs(self):
-        """Method to extract node features from OSMNx nodes GeoDataFrame. In that case retrieves hghway types and street_count
-        for each node. 
+        """Method to extract node features from OSMNx nodes GeoDataFrame. In that case retrieves highway types and street_count
+        for each node. Cleaning process included applying CountVectorizer to highway column that represents highway types. Also the 
+        "ref' column was removed.
+
 
         Returns:
-            pd.DataFrame: cleaned dataframe that contains node features
+            pd.DataFrame: cleaned dataframe that contains node features that consists of highway types and street count for each node.
         """
 
         if not any(col in self.gdf_nodes.columns for col in ['geometry', 'x', 'y', 'accidents_count', 'ref']):
@@ -40,24 +42,41 @@ class OSMnxGraph:
         attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', 'accidents_count', 'ref'], axis=1)
         attrs['highway'] = attrs['highway'].replace(0, 'unknown')
         vectorizer = CountVectorizer(tokenizer=lambda x: x.split())
-        X = vectorizer.fit_transform(attrs['highway'])
-        df_count = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
-        df_count['index'] = attrs.index
-        df_count.set_index("index", inplace = True)
-        result_df = pd.merge(attrs, df_count, left_index=True, right_index=True)
-        result_df.fillna(0, inplace=True)
-        result_df.drop(['highway', 'unknown'], axis=1, inplace=True)
-        self.gdf_nodes = result_df
-        return result_df
+        vectorized_feature = vectorizer.fit_transform(attrs['highway'])
+        df_vect_feature = pd.DataFrame(vectorized_feature.toarray(), columns=vectorizer.get_feature_names_out())
+        df_vect_feature['index'] = attrs.index
+        df_vect_feature.set_index("index", inplace = True)
+        cleaned_df = pd.merge(attrs, df_vect_feature, left_index=True, right_index=True)
+        cleaned_df.fillna(0, inplace=True)
+        cleaned_df.drop(['highway', 'unknown'], axis=1, inplace=True)
+        self.gdf_nodes = cleaned_df
+        return cleaned_df
     
 
 
     def get_edge_attrs(self):
-        """Method that gets edge attributes.
+        """Method that gets edge attributes. Includes preprocessing:
+        * lanes - add default value of 2
+        * maxspeed - add default value of 50 as common speed limit in urban area
+        * width - add default value of 2.0 as common road width
+        * other columns - add default value of "unspecified"
+
+        If column was numeric / bool and contained list the first element was taken. If column was string type the CountVectorizer
+        was applied. Then columns that were vectorized was dropped and also "ref' column was removed.
+
 
         Returns:
             pd.DataFrame: cleaned DataFrame that contains edge features
         """
+
+        def _get_first_element(lst):
+            """Method that gets first element of list if lst is of type "list"
+            """
+            if isinstance(lst, list):
+                return lst[0]
+            else:
+                return lst
+
         attrs = self.gdf_edges
         if not any(col in attrs.columns for col in ['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry']):
             return attrs
@@ -68,27 +87,27 @@ class OSMnxGraph:
             attrs['lanes'] = attrs['lanes'].fillna(2)
             attrs = attrs.drop(['ref', 'name'], axis=1)
             attrs = attrs.fillna("unspecified")
-            attrs['lanes'] = attrs['lanes'].apply(lambda x: self._get_first_element(x)).astype(int)
-            attrs['reversed'] = attrs['reversed'].apply(lambda x: self._get_first_element(x))
-            attrs['maxspeed'] = pd.to_numeric(attrs['maxspeed'].apply(lambda x: self._get_first_element(x)), errors='coerce').fillna(50).astype(int)
+            attrs['lanes'] = attrs['lanes'].apply(lambda x: _get_first_element(x)).astype(int)
+            attrs['reversed'] = attrs['reversed'].apply(lambda x: _get_first_element(x))
+            attrs['maxspeed'] = pd.to_numeric(attrs['maxspeed'].apply(lambda x: _get_first_element(x)), errors='coerce').fillna(50).astype(int)
             attrs['reversed'] = attrs['reversed'].map({True: 1, False: 0}).astype(int)
             attrs['oneway'] = attrs['oneway'].map({True: 1, False: 0}).astype(int)
             vect = CountVectorizer(tokenizer=lambda x: x.split())
-            result_df = attrs
+            cleaned_df = attrs
             for col in ['highway', 'access', 'junction', 'bridge', 'tunnel']:
                 attrs[col] = attrs[col].apply(lambda x: ' '.join(x) if isinstance(x, list) else str(x))
-                X2 = vect.fit_transform(attrs[col])
-                df_count2 = pd.DataFrame(X2.toarray(), columns=vect.get_feature_names_out())
-                df_count2['index'] = attrs.index
-                df_count2.set_index("index", inplace = True)
+                vectorized_feature = vect.fit_transform(attrs[col])
+                df_feature_count = pd.DataFrame(vectorized_feature.toarray(), columns=vect.get_feature_names_out())
+                df_feature_count['index'] = attrs.index
+                df_feature_count.set_index("index", inplace = True)
                 new_index_tuples = [(u, v, x) for u, v, x in attrs.index]
                 new_index = pd.MultiIndex.from_tuples(new_index_tuples, names=['u', 'v', 'key'])
-                df_count2.index = new_index
-                df_count2 = df_count2.rename(columns={col_nm: col + "_"+ col_nm for col_nm in df_count2.columns})
-                result_df = pd.merge(result_df, df_count2, left_index=True, right_index=True)
-            result_df = result_df.drop(['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry'], axis=1)
-            self.gdf_edges = result_df
-            return result_df
+                df_feature_count.index = new_index
+                df_feature_count = df_feature_count.rename(columns={col_nm: col + "_"+ col_nm for col_nm in df_feature_count.columns})
+                cleaned_df = pd.merge(cleaned_df, df_feature_count, left_index=True, right_index=True)
+            cleaned_df = cleaned_df.drop(['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry'], axis=1)
+            self.gdf_edges = cleaned_df
+            return cleaned_df
         
         
     def create_graph(self, aggregation_type: Union[Literal["node"], Literal["edge"]], normalize_y=True):
@@ -125,7 +144,12 @@ class OSMnxGraph:
         """Shows graph statistics
 
         Returns:
-            dict: graph statistics
+            dict: graph statistics that includes: 
+                    * Nodes - nodes count
+                    * Edges - edges count
+                    * Nodes class - number of nodes class
+                    * Directed - whether graph is directed
+                    * Graph density - graph density in percent
         """
         data = self.graph_data
         max_edges = data.num_nodes * (data.num_nodes- 1) if data.is_directed() else data.num_nodes * (data.num_nodes - 1) // 2
@@ -164,41 +188,43 @@ class OSMnxGraph:
         
         return new_latitude_N, new_latitude_S, new_longitude_W, new_longitude_E
     
-    def _calculate_distance(self, coord1, coord2):
-        """Calculates cdist between 2 coordinates
-
-        Args:
-            coord1 (Point): first coord
-            coord2 (Point): second coord
-
-        Returns:
-            distance: distance between coordinates
-        """
-        return cdist([coord1], [coord2])[0, 0]
+    
     
     
     def _find_nearest_node(self, accident_point, nodes):
-        """Finds nearest node
+        """Finds nearest node from given accident point based on cdist
 
         Args:
             accident_point (Point): accident point
-            nodes 
+            nodes (pd.Series): pandas series with node geometry
 
         Returns:
-            osmid
+            first_dist_osmid (int): osmid for node closest to accident point
         """
+        def _calculate_distance(coord1, coord2):
+            """Calculates cdist between 2 coordinates
+
+            Args:
+                coord1 (Point): first coord
+                coord2 (Point): second coord
+
+            Returns:
+                distance: distance between coordinates
+            """
+            return cdist([coord1], [coord2])[0, 0]
+        
         accident_point = np.array(accident_point.xy).T[0]
         accident_series = pd.Series([accident_point] * len(nodes), index=nodes.index)
-        sorted_nodes = nodes.combine(accident_series, self._calculate_distance).sort_values()
+        sorted_nodes = nodes.combine(accident_series, _calculate_distance).sort_values()
         first_dist_osmid = sorted_nodes.index[0]
         return first_dist_osmid
     
     def _find_nearest_edge(self, accident_point, edges):
-        """Finds nearest edge
+        """Finds nearest edge from given accident point
 
         Args:
             accident_point (Point): accident point
-            edges 
+            edges (pd.Series): edges geometry series
         """
         def _calculate_edge_distance(edge, accident_point):
             return edge.distance(accident_point)
@@ -213,7 +239,6 @@ class OSMnxGraph:
 
         Args:
             aggregation_type (Union[Literal[&quot;node&quot;], Literal[&quot;edge&quot;]]): aggregation type
-
 
         """
         if aggregation_type == "node":
@@ -260,15 +285,11 @@ class OSMnxGraph:
                 nearest_osmid = self._find_nearest_edge(accident_point,  nodes_or_edges_within_square.geometry)
                 self.gdf_edges.at[nearest_osmid, 'accidents_count'] += 1
 
-        # Reset square edge length for next iteration
+            # Reset square edge length for next iteration
             square_edge_length = self.start_acc_distance
     
     
-    def _get_first_element(self, lst):
-        if isinstance(lst, list):
-            return lst[0]
-        else:
-            return lst
+
         
 
 
