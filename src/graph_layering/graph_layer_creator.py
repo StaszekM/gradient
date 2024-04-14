@@ -42,6 +42,26 @@ class GraphLayerController:
         return self._hexes_centroids_gdf
 
     def get_virtual_edges_to_hexes(self, source: SourceType) -> pd.DataFrame:
+        """Creates virtual edges between selected OSMNX sources (virtual edge starting points) and hexes.
+        The sources can be either OSMNX nodes or OSMNX edges.
+
+        The virtual edge exists if the source is contained within the hex (even partially).
+
+        Parameters
+        ----------
+        source : SourceType
+            Starting point of the virtual edges, either OSMNX_NODES or OSMNX_EDGES.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with columns `region_id` (hex), `source_id` (source, either node or edge, depending on source).
+
+        Raises
+        ------
+        ValueError
+            If the source is not recognized (neither SourceType.OSMNX_NODES nor SourceType.OSMNX_EDGES)
+        """
         if source in self._virtual_edges_dfs_cache:
             return self._virtual_edges_dfs_cache[source]
 
@@ -74,6 +94,21 @@ class GraphLayerController:
         return result
 
     def get_edges_between_hexes(self, k_distance: int = 1) -> pd.DataFrame:
+        """Creates edges between hexes at the specified k-hop distance.
+
+        The edges only present the graph structure between hexes, without any geometrical information.
+
+        Parameters
+        ----------
+        k_distance : int, optional
+            Distance between hexes to create edges for, by default 1 (adjacent hexes)
+
+        Returns
+        -------
+        pd.DataFrame
+            The DataFrame with columns `u`, `v` where `u` and `v` are hexes' H3 ids.
+
+        """
         if k_distance in self._edges_between_hexes_cache:
             return self._edges_between_hexes_cache[k_distance]
 
@@ -110,8 +145,32 @@ class GraphLayerController:
 
         return result
 
-    # adds linestrings between sources and hexes centroids based on virtual edges (for not it assumes sources are points)
     def get_virtual_linestrings(self, source: SourceType) -> gpd.GeoDataFrame:
+        """Creates virtual geometrical linestrings between selected OSMNX sources (virtual edge starting points) and hexes' centroids.
+
+        The linestrings may be used to visualize the connections between sources and hexes' centroids.
+
+        In case of OSMNX_NODES source, the linestring is created between the node and the hex's centroid.
+        In case of OSMNX_EDGES source, the linestring is created between the edge's middle point and the hex's centroid.
+
+        Parameters
+        ----------
+        source : SourceType
+            Starting point of the virtual edges, either OSMNX_NODES or OSMNX_EDGES.
+
+            Virtual edges will be transformed into geometrical linestrings.
+        Returns
+        -------
+        gpd.GeoDataFrame
+            a GeoDataFrame with columns `region_id` (ending point, hex), `source_id`(starting point, node/edge, depending on source),
+            `virtual_edge` (geometry column) and virtual edge attributes (see: `patch_virtual_edges_with_mapper_fn`)
+
+            The GeoDataFrame's CRS is the same as the CRS of the hexes' centroids.
+        Raises
+        ------
+        ValueError
+            If the source is not recognized (neither SourceType.OSMNX_NODES nor SourceType.OSMNX_EDGES)
+        """
         if source in self._virtual_linestrings_cache:
             return self._virtual_linestrings_cache[source]
 
@@ -162,6 +221,21 @@ class GraphLayerController:
         return result
 
     def get_virtual_linestrings_between_centroids(self, k_distance: int = 1):
+        """Creates virtual geometrical linestrings between hexes' centroids based on the edges between hexes at given distance.
+
+        The linestrings may be used to visualize the connections between hexes' centroids.
+
+        Parameters
+        ----------
+        k_distance : int, optional
+            Distance between hexes to draw edges for, by default 1 (adjacent hexes)
+
+        Returns
+        -------
+        GeoDataFrame
+            The GeoDataFrame with columns 'u', 'v' and 'edge' where 'u' and 'v' are hexes' centroids and 'edge' is the linestring between them.
+            'Edge' is the geometry column of the GeoDataFrame. Its CRS is the same as the CRS of the hexes' centroids.
+        """
         hexes_edges_gdf = self.get_edges_between_hexes(k_distance=k_distance)
 
         merged = (
@@ -193,6 +267,22 @@ class GraphLayerController:
         mapper_fn: AggFuncType,
         source: SourceType,
     ) -> None:
+        """For given source (either edge or node), maps the virtual edges (OSMNX to H3) with
+        the mapper function and stores the result as new virtual edge attributes.
+
+        Parameters
+        ----------
+        mapper_fn : Callable
+            The function that takes a row of concatenated (OSMNX source + H3 target) attributes and optionally
+            returns a tuple of new attributes. Tuple values will be changed into new attribute columns in virtual edges dataframe.
+
+            The source element attributes are prefixed with `source_` and the target element attributes are prefixed with `region_`.
+
+            Attribute columns are named `edge_emb_{i}` for i = 0, 1, ..., n-1,
+            where n is the number elements in the tuple returned by the mapper function.
+        source : SourceType
+            The source (starting point) of the virtual edges, either OSMNX_NODES or OSMNX_EDGES.
+        """
         virtual_edges_df = self.get_virtual_edges_to_hexes(source=source)
 
         source_gdf = (
@@ -229,6 +319,18 @@ class GraphLayerController:
         ).join(aggr_columns)
 
     def reset_state(self):
+        """Resets the state of the controller to the initial state, i.e.:
+        - clears the cache of virtual edges dataframes
+        - clears the cache of edges between hexes dataframes
+        - clears the cache of virtual linestrings dataframes
+        - recreates computed centroids of hexes dataframe
+        - recreates H3 neighborhood used to calculate grid of hexes' centroids
+
+        The 'cleared cache' means that the next call to the method that uses any of the cache
+        mentioned above will recompute the corresponding DataFrame and save it to the cache.
+
+        The method is called once during the construction of the controller.
+        """
         self._h3_neighbourhood = H3Neighbourhood(
             gpd.GeoDataFrame(index=self.hexes_gdf["h3_id"])
         )
