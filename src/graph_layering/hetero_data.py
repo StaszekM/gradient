@@ -11,6 +11,7 @@ def create_hetero_data(
     osmnx_node_attrs_columns_names: Iterable[str],
     osmnx_edge_attrs_columns_names: Iterable[str],
     virtual_edge_attrs_columns_names: Iterable[str],
+    hexes_y_columns_names: Iterable[str],
 ) -> HeteroData:
     data = HeteroData()
     edges_between_hexes = controller.get_edges_between_hexes()
@@ -19,11 +20,18 @@ def create_hetero_data(
     )
 
     data["hex"].x = torch.tensor(
-        controller.hexes_centroids_gdf[hexes_attrs_columns_names].to_numpy()
+        controller.hexes_centroids_gdf[hexes_attrs_columns_names].to_numpy(),
+        dtype=torch.float32,
+    )
+
+    data["hex"].y = torch.tensor(
+        controller.hexes_centroids_gdf[hexes_y_columns_names].to_numpy(),
+        dtype=torch.float32,
     )
 
     data["osmnx_node"].x = torch.tensor(
-        controller.osmnx_nodes_gdf[osmnx_node_attrs_columns_names].to_numpy()
+        controller.osmnx_nodes_gdf[osmnx_node_attrs_columns_names].to_numpy(),
+        dtype=torch.float32,
     )
 
     data["hex", "connected_to", "hex"].edge_index = torch.tensor(
@@ -57,7 +65,8 @@ def create_hetero_data(
     )
 
     data["osmnx_node", "connected_to", "osmnx_node"].edge_attr = torch.tensor(
-        node_to_node_connections[osmnx_edge_attrs_columns_names].to_numpy()
+        node_to_node_connections[osmnx_edge_attrs_columns_names].to_numpy(),
+        dtype=torch.float32,
     )
 
     data["osmnx_node", "connected_to", "hex"].edge_index = torch.tensor(
@@ -65,7 +74,8 @@ def create_hetero_data(
     )
 
     data["osmnx_node", "connected_to", "hex"].edge_attr = torch.tensor(
-        edges_between_source_and_hexes[virtual_edge_attrs_columns_names].to_numpy()
+        edges_between_source_and_hexes[virtual_edge_attrs_columns_names].to_numpy(),
+        dtype=torch.float32,
     )
 
     return data
