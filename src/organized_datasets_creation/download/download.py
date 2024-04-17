@@ -193,6 +193,15 @@ def load_osm_way_data(
     ).set_index("feature_id")
 
 
+def download_hexes_for_nominatim(nominatim_city_name: str, resolution: int):
+    city_name = resolve_nominatim_city_name(nominatim_city_name)
+    region_gdf = geocode_to_region_gdf(city_name)
+    regionalizer = H3Regionalizer(resolution)
+    hexes = regionalizer.transform(region_gdf)
+
+    return hexes
+
+
 def create_hexes_gdf(
     nominatim_city_name: str, resolution: int, hexes_cache_folder: str
 ) -> gpd.GeoDataFrame:
@@ -228,10 +237,7 @@ def create_hexes_gdf(
     if has_cached_gdf:
         return gpd.read_file(hexes_path).set_index("region_id")
 
-    city_name = resolve_nominatim_city_name(nominatim_city_name)
-    region_gdf = geocode_to_region_gdf(city_name)
-    regionalizer = H3Regionalizer(resolution)
-    hexes = regionalizer.transform(region_gdf)
+    hexes = download_hexes_for_nominatim(nominatim_city_name, resolution)
 
     hexes.to_file(hexes_path, driver="GeoJSON")
 
