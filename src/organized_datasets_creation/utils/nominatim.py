@@ -1,12 +1,27 @@
 """Nominatim-related utilities module.
 
 """
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 
 import unidecode
 import requests
 from typing import Dict
 
 nominatim_cache: Dict[str, str] = {}
+
+
+def send_get_request(URL):
+    sess = requests.session()
+
+    retries = Retry(
+        total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504]
+    )
+
+    sess.mount("https://", HTTPAdapter(max_retries=retries))
+    get_URL = sess.get(URL, timeout=10)
+    return get_URL
 
 
 def convert_nominatim_name_to_filename(name: str) -> str:
@@ -43,7 +58,7 @@ def resolve_nominatim_city_name(name: str) -> str:
     if cached_name:
         return cached_name
 
-    value = requests.get(
+    value = send_get_request(
         f"https://nominatim.openstreetmap.org/search?q={name}&format=json"
     ).json()[0]
 

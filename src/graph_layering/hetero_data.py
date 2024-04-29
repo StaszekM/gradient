@@ -12,6 +12,7 @@ def create_hetero_data(
     osmnx_edge_attrs_columns_names: Iterable[str],
     virtual_edge_attrs_columns_names: Iterable[str],
     hexes_y_columns_names: Iterable[str],
+    squeeze_y: bool = True,
 ) -> HeteroData:
     data = HeteroData()
     edges_between_hexes = controller.get_edges_between_hexes()
@@ -27,7 +28,7 @@ def create_hetero_data(
     data["hex"].y = torch.tensor(
         controller.hexes_centroids_gdf[hexes_y_columns_names].to_numpy(),
         dtype=torch.float32,
-    )
+    ).to(int)
 
     data["osmnx_node"].x = torch.tensor(
         controller.osmnx_nodes_gdf[osmnx_node_attrs_columns_names].to_numpy(),
@@ -77,5 +78,8 @@ def create_hetero_data(
         edges_between_source_and_hexes[virtual_edge_attrs_columns_names].to_numpy(),
         dtype=torch.float32,
     )
+
+    if squeeze_y:
+        data["hex"].y = data["hex"].y.squeeze()
 
     return data
