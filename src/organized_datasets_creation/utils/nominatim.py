@@ -1,6 +1,7 @@
 """Nominatim-related utilities module.
 
 """
+
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -9,7 +10,13 @@ import unidecode
 import requests
 from typing import Dict
 
-nominatim_cache: Dict[str, str] = {}
+nominatim_cache: Dict[str, str] = {
+    "Wrocław, Poland": "Wrocław",
+    "Warsaw, Poland": "Warszawa",
+    "Szczecin, Poland": "Szczecin",
+    "Poznań, Poland": "Poznań",
+    "Kraków, Poland": "Kraków",
+}
 
 
 def send_get_request(URL):
@@ -60,7 +67,9 @@ def resolve_nominatim_city_name(name: str) -> str:
 
     value = send_get_request(
         f"https://nominatim.openstreetmap.org/search?q={name}&format=json"
-    ).json()[0]
+    ).json()
+
+    value = value[0]
 
     nominatim_cache[name] = value.get("name")
 
