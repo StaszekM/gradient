@@ -11,7 +11,7 @@ class OSMEmbedderGraph:
         self,
         gdf: gpd.GeoDataFrame,
         labels_column_name: str,
-        weights_type: str = "neighboors",
+        weights_type: str = "neighbours",
     ):
         self.weights = weights_type
         self.gdf = gdf
@@ -24,8 +24,8 @@ class OSMEmbedderGraph:
 
     def createGraph_nx(self):
         assert (
-            self.weights in ["neighboors", "shortest_path", "centroid"]
-        ), f"Unknown weights_type: '{self.weights}'. Select one from ['neighboors', 'shortest_path', 'centroid']"
+            self.weights in ["neighbours", "shortest_path", "centroid"]
+        ), f"Unknown weights_type: '{self.weights}'. Select one from ['neighbours', 'shortest_path', 'centroid']"
 
         graph = nx.Graph()
 
@@ -94,16 +94,19 @@ class OSMEmbedderGraph:
     def graph_visualization(self):
         if self.graph_nx == None:
             self.createGraph_nx()
+            
+        fig, ax = plt.subplots()
 
         if self.weights == "centroid" or self.weights == "shortest_path":
             widths = list(nx.get_edge_attributes(self.graph_nx, "weight").values())
             max_width = max(widths)
             widths = [width / max_width for width in widths]
             nx.draw(self.graph_nx, node_size=30, node_color="plum", width=widths)
-            plt.show()
         else:
             nx.draw(self.graph_nx, node_size=30, node_color="plum", width=1)
-            plt.show()
+            
+        ax.set_title("Graph Visualization")
+        return fig
 
     def show_statistics(self):
         data = self.graph_data
@@ -121,3 +124,4 @@ class OSMEmbedderGraph:
             "Directed": data.is_directed(),
             "Graph density [%]": round((edges / (max_edges) * 100), 3),
         }
+
