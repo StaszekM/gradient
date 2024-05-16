@@ -82,3 +82,15 @@ To run the notebook, open the `src/organized_datasets_creation/papermill_downloa
 ```bash
 python -m src.organized_datasets_creation.papermill_download
 ```
+
+# Run project
+
+Start by copying `config.dist.yml` to `config.yml` and all config files `downstream_task_config/[name].dist.yml` to `downstream_task_config/[name].yml`.
+
+Fill out the config with your variables, and then run the project:
+
+```bash
+./run.sh --notebook-output [your_desired_output_ipynb] --wandb-key [wandb_key]
+```
+
+All output will be passed to stdout, and notebook with results will be created.

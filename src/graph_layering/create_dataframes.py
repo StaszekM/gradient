@@ -11,7 +11,7 @@ from src.organized_datasets_creation.utils import resolve_nominatim_city_name
 
 
 def create_osmnx_dataframes(
-    accidents_location: str, nominatim_city_name: str
+    df_accidents: pd.DataFrame, nominatim_city_name: str
 ) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Creates ready OSMNX nodes and edges GeoDataFrames with accidents data.
@@ -21,8 +21,8 @@ def create_osmnx_dataframes(
 
     Parameters
     ----------
-    accidents_location : str
-        The path to the CSV file with accidents data.
+    df_accidents : pd.DataFrame
+        The dataframe with accidents data.
     nominatim_city_name : str
         The Nominatim city name for which the accidents data should be filtered. If this city is not in the data, the function
         will raise an AssertionError.
@@ -48,7 +48,6 @@ def create_osmnx_dataframes(
             - geometry: linestring geometry
         The remaining columns are attributes from the OSMNX edges data.
     """
-    df_accidents = pd.read_csv(accidents_location)
 
     city_name = resolve_nominatim_city_name(nominatim_city_name)
 
@@ -56,17 +55,16 @@ def create_osmnx_dataframes(
         df_accidents["mie_nazwa"].isin([city_name]).any()
     ), f"City {nominatim_city_name} ({city_name}) is not in the data"
 
-    df_accidents.drop(
+    df_accidents = df_accidents.drop(
         df_accidents[(df_accidents["mie_nazwa"] != city_name)].index,
-        inplace=True,
     )
-    df_accidents.drop(columns="uczestnicy", inplace=True)
+    df_accidents = df_accidents.drop(columns="uczestnicy")
 
     geometry = [
         Point(xy) for xy in zip(df_accidents["wsp_gps_x"], df_accidents["wsp_gps_y"])
     ]
     gdf_accidents = gpd.GeoDataFrame(df_accidents, geometry=geometry)
-    gdf_accidents.drop(columns=["wsp_gps_x", "wsp_gps_y"], inplace=True)
+    gdf_accidents = gdf_accidents.drop(columns=["wsp_gps_x", "wsp_gps_y"])
     G = ox_graph.graph_from_place(nominatim_city_name, network_type="drive")
     gdf_nodes, gdf_edges = ox.graph_to_gdfs(G)
 

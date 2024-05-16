@@ -16,3 +16,6 @@ data/organized-datasets/highway2vec_cache
 .DS_Store
 .idea/
 wandb
+config.yml
+downstream_task_config/*.yml
+!downstream_task_config/*.dist.yml

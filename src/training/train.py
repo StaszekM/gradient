@@ -18,8 +18,8 @@ def train(
     val_data: List[CityHeteroData],
     test_data: CityHeteroData,
     hparams,
+    train_save_dir,
     epochs: int = 100,
-    train_save_dir="/media/staszek/m2-mint/gradient_logs/",
 ):
     normalizer = Normalizer()
 

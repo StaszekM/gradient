@@ -12,7 +12,7 @@ from typing import Dict
 
 nominatim_cache: Dict[str, str] = {
     "Wrocław, Poland": "Wrocław",
-    "Warsaw, Poland": "Warszawa",
+    "Warszawa, Poland": "Warszawa",
     "Szczecin, Poland": "Szczecin",
     "Poznań, Poland": "Poznań",
     "Kraków, Poland": "Kraków",

@@ -1,0 +1,6 @@
+# for now, only accidents-prediction is supported, later we can add Żabka, airbnb or any other
+downstream_task: 'accidents-prediction'
+params:
+  GRAPH_LOCATION: "/path/to/gradient/data/wro/wro-map.osm"
+  ORGANIZED_DATASETS_LOCATION: "/path/to/gradient/data/organized-datasets"
+
