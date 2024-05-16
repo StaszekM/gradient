@@ -65,7 +65,9 @@ def create_osmnx_dataframes(
     ]
     gdf_accidents = gpd.GeoDataFrame(df_accidents, geometry=geometry)
     gdf_accidents = gdf_accidents.drop(columns=["wsp_gps_x", "wsp_gps_y"])
-    G = ox_graph.graph_from_place(nominatim_city_name, network_type="drive")
+    G = ox_graph.graph_from_place(
+        nominatim_city_name, network_type="drive", simplify=False
+    )
     gdf_nodes, gdf_edges = ox.graph_to_gdfs(G)
 
     assert gdf_edges.crs == gdf_nodes.crs
