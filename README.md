@@ -58,7 +58,7 @@ After attaching VS Code, you can navigate in container's file system normally, r
 2. Do include installed package version in `requirements.txt`,
 3. Don't include packages that are internal packages not installed by you, let pip resolve conflicting dependencies by itself
 4. Python starts in container at `/` directory, so all relative imports from source code might not be found. If this is the case, for example in Jupyter, add cell with `os.chdir('/app')` to fix this.
-# Rules for commit and branch names
+5. Add .env file with your WANDB_API_KEY.
 
 # Set up your Docker env
 
