@@ -13,19 +13,21 @@ from typing import Union, Literal
 
 
 class OSMnxGraph:
-    def __init__(
-        self,
-        gdf_accidents: gpd.GeoDataFrame,
-        gdf_nodes: gpd.GeoDataFrame,
-        gdf_edges: gpd.GeoDataFrame,
-        start_acc_distance: float = 100,
-    ):
-        self.gdf_accidents = gdf_accidents
+    def __init__(self, gdf_events: gpd.GeoDataFrame, 
+                 gdf_nodes: gpd.GeoDataFrame, 
+                 gdf_edges: gpd.GeoDataFrame, 
+                 start_acc_distance: float = 100,
+                 y_column_name: str = 'accidents_count'
+                 ):
+        
+        
+        self.gdf_events = gdf_events
         self.gdf_nodes = gdf_nodes
         self.gdf_edges = gdf_edges
         self.start_acc_distance = start_acc_distance
         self.graph_nx = None
         self.graph_data = None
+        self.y_column_name = y_column_name
 
     def get_node_attrs(self):
         """Method to extract node features from OSMNx nodes GeoDataFrame. In that case retrieves highway types and street_count
@@ -37,15 +39,10 @@ class OSMnxGraph:
             pd.DataFrame: cleaned dataframe that contains node features that consists of highway types and street count for each node.
         """
 
-        if not any(
-            col in self.gdf_nodes.columns
-            for col in ["geometry", "x", "y", "accidents_count", "ref"]
-        ):
+        if not any(col in self.gdf_nodes.columns for col in ['geometry', 'x', 'y', self.y_column_name, 'ref']):
             return self.gdf_nodes
-        attrs = self.gdf_nodes.drop(
-            ["geometry", "x", "y", "accidents_count", "ref"], axis=1, errors="ignore"
-        )
-        attrs["highway"] = attrs["highway"].replace(0, "unknown")
+        attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', self.y_column_name, 'ref'], axis=1)
+        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
         vectorizer = CountVectorizer(tokenizer=lambda x: x.split())
         vectorized_feature = vectorizer.fit_transform(attrs["highway"])
         df_vect_feature = pd.DataFrame(
@@ -158,37 +155,34 @@ class OSMnxGraph:
             )
             self.gdf_edges = cleaned_df
             return cleaned_df
-
-    def create_graph(
-        self,
-        aggregation_type: Union[Literal["node"], Literal["edge"]],
-        normalize_y=True,
-    ):
+        
+        
+    def create_graph(self, 
+                     element_type: Union[Literal["node"], Literal["edge"]], 
+                     aggregation_method: Union[Literal["sum"], Literal["mean"], Literal["count"]],
+                     normalize_y=True):
         """Method that creates graph from OSMNx geodataframes for nodes and edges.
 
         Args:
-            aggregation_type (Union[Literal["node"], Literal["edge"]]): node or edge aggregation type
-            normalize_y (bool, optional): If y should be treated as binary classification (if y greater than 0 it is 1
+            element_type (Union[Literal["node"], Literal["edge"]]): node or edge aggregation type
+            aggregation_method (Union[Literal["sum"], Literal["mean"], Literal["count"]): aggregation method
+            normalize_y (bool, optional): If y should be treated as binary classification (if y greater than 0 it is 1 
                                             and if 0 then 0). Defaults to True.
 
         Returns:
             pyg_graph (torch_geometric.data.Data): pytorch geometric graph
         """
-        self._aggregate_accidents(aggregation_type)
+        self._aggregate(element_type, aggregation_method)
         self.gdf_nodes.fillna(0, inplace=True)
         self.gdf_edges.fillna(0, inplace=True)
         self.graph_nx = ox.graph_from_gdfs(self.gdf_nodes, self.gdf_edges)
         pyg_graph = from_networkx(self.graph_nx)
         # x and y are node attrs to assign edge attributes use 'pyg_graph.edge_attr'
-        if aggregation_type == "node":
-            pyg_graph.y = torch.tensor(
-                self.gdf_nodes["accidents_count"].values, dtype=torch.long
-            )
+        if element_type == "node":
+            pyg_graph.y = torch.tensor(self.gdf_nodes[self.y_column_name].values, dtype=torch.long)
             attrs = self.get_node_attrs()
-        elif aggregation_type == "edge":
-            pyg_graph.y = torch.tensor(
-                self.gdf_edges["accidents_count"].values, dtype=torch.long
-            )
+        elif element_type == "edge":
+            pyg_graph.y = torch.tensor(self.gdf_edges[self.y_column_name].values, dtype=torch.long)
             attrs = self.get_edge_attrs()
         if normalize_y:
             pyg_graph.y = torch.where(
@@ -250,16 +244,19 @@ class OSMnxGraph:
         new_longitude_W = lon - (meters * m) / math.cos(lat * (pi / 180))
 
         return new_latitude_N, new_latitude_S, new_longitude_W, new_longitude_E
-
-    def _find_nearest_node(self, accident_point, nodes):
-        """Finds nearest node from given accident point based on cdist
+    
+    
+    
+    
+    def _find_nearest_node(self, event_point, nodes):
+        """Finds nearest node from given event point based on cdist
 
         Args:
-            accident_point (Point): accident point
+            event_point (Point): event point
             nodes (pd.Series): pandas series with node geometry
 
         Returns:
-            first_dist_osmid (int): osmid for node closest to accident point
+            first_dist_osmid (int): osmid for node closest to event point
         """
 
         def _calculate_distance(coord1, coord2):
@@ -273,61 +270,60 @@ class OSMnxGraph:
                 distance: distance between coordinates
             """
             return cdist([coord1], [coord2])[0, 0]
-
-        accident_point = np.array(accident_point.xy).T[0]
-        accident_series = pd.Series([accident_point] * len(nodes), index=nodes.index)
-        sorted_nodes = nodes.combine(accident_series, _calculate_distance).sort_values()
+        
+        event_point = np.array(event_point.xy).T[0]
+        event_series = pd.Series([event_point] * len(nodes), index=nodes.index)
+        sorted_nodes = nodes.combine(event_series, _calculate_distance).sort_values()
         first_dist_osmid = sorted_nodes.index[0]
         return first_dist_osmid
-
-    def _find_nearest_edge(self, accident_point, edges):
-        """Finds nearest edge from given accident point
+    
+    def _find_nearest_edge(self, event_point, edges):
+        """Finds nearest edge from given event point
 
         Args:
-            accident_point (Point): accident point
+            event_point (Point): event point
             edges (pd.Series): edges geometry series
         """
-
-        def _calculate_edge_distance(edge, accident_point):
-            return edge.distance(accident_point)
-
-        accident_series = pd.Series([accident_point] * len(edges), index=edges.index)
-        sorted_edges = edges.combine(
-            accident_series, _calculate_edge_distance
-        ).sort_values()
+        def _calculate_edge_distance(edge, event_point):
+            return edge.distance(event_point)
+        
+        event_series = pd.Series([event_point] * len(edges), index=edges.index)
+        sorted_edges = edges.combine(event_series, _calculate_edge_distance).sort_values()
         first_dist_osmid = sorted_edges.index[0]
         return first_dist_osmid
-
-    def _aggregate_accidents(
-        self, aggregation_type: Union[Literal["node"], Literal["edge"]]
-    ):
-        """Method to aggregate accidents to node or edge
+    
+    def _aggregate(self, 
+                   element_type: Union[Literal["node"], Literal["edge"]], 
+                   aggregation_method: Union[Literal["sum"], Literal["mean"], Literal["count"]]):
+        """Method to aggregate event to node or edge
 
         Args:
-            aggregation_type (Union[Literal[&quot;node&quot;], Literal[&quot;edge&quot;]]): aggregation type
+            element_type (Union[Literal[&quot;node&quot;], Literal[&quot;edge&quot;]]): aggregation type
+            aggregation_method (Union[Literal[&quot;sum&quot;], Literal[&quot;mean&quot;], Literal[&quot;count&quot;]]): aggregation method
 
         """
-        if aggregation_type == "node":
-            self.gdf_nodes["accidents_count"] = 0
-        elif aggregation_type == "edge":
-            self.gdf_edges["accidents_count"] = 0
+        if element_type == "node":
+            self.gdf_nodes['count'] = 0
+            self.gdf_nodes['sum'] = 0
+        elif element_type == "edge":
+            self.gdf_edges['count'] = 0
+            self.gdf_edges['sum'] = 0
+
 
         square_edge_length = self.start_acc_distance
 
-        for _, accident in self.gdf_accidents.iterrows():
-            # Create square around accident point
-            accident_point = accident.geometry
-            square_N, square_S, square_E, square_W = self._get_lat_lon_distance(
-                accident_point.y, accident_point.x, square_edge_length / 2
-            )
-            square = box(square_W, square_S, square_E, square_N)
-
-            if aggregation_type == "node":
+        for _, event in self.gdf_events.iterrows():
+            # Create square around event point
+            event_point = event.geometry
+            event_value = event[self.y_column_name] if aggregation_method != "count" and self.y_column_name in event else 1
+            square_N, square_S, square_E, square_W = self._get_lat_lon_distance(event_point.y, event_point.x, square_edge_length/2)
+            square = box(square_W, square_S,
+                        square_E, square_N)
+            
+            if element_type == "node":
                 # Check for nodes within the square
-                nodes_or_edges_within_square = self.gdf_nodes[
-                    self.gdf_nodes.intersects(square)
-                ]
-            elif aggregation_type == "edge":
+                nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
+            elif element_type == "edge":
                 # Check for edges within the square
                 nodes_or_edges_within_square = self.gdf_edges[
                     self.gdf_edges.intersects(square)
@@ -336,35 +332,49 @@ class OSMnxGraph:
             # If no nodes/edges found, increase square size and repeat
             while len(nodes_or_edges_within_square) == 0:
                 square_edge_length += 100
-                square_N, square_S, square_E, square_W = self._get_lat_lon_distance(
-                    accident_point.y, accident_point.x, square_edge_length / 2
-                )
-                square = box(square_W, square_S, square_E, square_N)
-
+                square_N, square_S, square_E, square_W = self._get_lat_lon_distance(event_point.y, event_point.x, square_edge_length/2)
+                square = box(square_W, square_S,
+                            square_E, square_N)
+                
                 # Check for nodes/edges within the square
-                if aggregation_type == "node":
-                    nodes_or_edges_within_square = self.gdf_nodes[
-                        self.gdf_nodes.intersects(square)
-                    ]
-                elif aggregation_type == "edge":
-                    nodes_or_edges_within_square = self.gdf_edges[
-                        self.gdf_edges.intersects(square)
-                    ]
-
-            # Find nearest node within the square and update accidents_count column in gdf_nodes/edges
-            if aggregation_type == "node":
-                nearest_osmid = self._find_nearest_node(
-                    accident_point,
-                    nodes_or_edges_within_square.geometry.apply(
-                        lambda x: np.array(x.xy).T[0]
-                    ),
-                )
-                self.gdf_nodes.at[nearest_osmid, "accidents_count"] += 1
-            elif aggregation_type == "edge":
-                nearest_osmid = self._find_nearest_edge(
-                    accident_point, nodes_or_edges_within_square.geometry
-                )
-                self.gdf_edges.at[nearest_osmid, "accidents_count"] += 1
+                if element_type == "node":
+                    nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
+                elif element_type == "edge":
+                    nodes_or_edges_within_square = self.gdf_edges[self.gdf_edges.intersects(square)]
+            
+            # Find nearest node/edge within the square and update y_column_name column in gdf_nodes/edges
+            if element_type == "node":
+                nearest_osmid = self._find_nearest_node(event_point,  nodes_or_edges_within_square.geometry.apply(lambda x: np.array(x.xy).T[0]))
+                self.gdf_nodes.at[nearest_osmid, 'sum'] += event_value
+                self.gdf_nodes.at[nearest_osmid, 'count'] += 1
+                
+            elif element_type == "edge":
+                nearest_osmid = self._find_nearest_edge(event_point,  nodes_or_edges_within_square.geometry)
+                self.gdf_edges.at[nearest_osmid, 'sum'] += event_value
+                self.gdf_edges.at[nearest_osmid, 'count'] += 1
 
             # Reset square edge length for next iteration
             square_edge_length = self.start_acc_distance
+        
+        if aggregation_method == "mean":
+            if element_type == "node":
+                self.gdf_nodes[self.y_column_name] = self.gdf_nodes['sum'] / self.gdf_nodes['count']
+            elif element_type == "edge":
+                self.gdf_edges[self.y_column_name] = self.gdf_edges['sum'] / self.gdf_edges['count']
+
+        self.gdf_nodes.rename(columns={aggregation_method: self.y_column_name}, inplace=True)
+        self.gdf_edges.rename(columns={aggregation_method: self.y_column_name}, inplace=True)
+        
+        self.gdf_nodes.drop('count', axis=1, inplace=True) if 'count' in self.gdf_nodes.columns else None
+        self.gdf_nodes.drop('sum', axis=1, inplace=True) if 'sum' in self.gdf_nodes.columns else None
+        self.gdf_edges.drop('count', axis=1, inplace=True) if 'count' in self.gdf_edges.columns else None
+        self.gdf_edges.drop('sum', axis=1, inplace=True) if 'sum' in self.gdf_edges.columns else None
+            
+    
+    
+
+        
+
+
+
+
