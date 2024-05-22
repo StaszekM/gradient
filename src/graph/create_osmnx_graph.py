@@ -85,16 +85,17 @@ class OSMnxGraph:
             return attrs
         else:
             attrs.replace('NaN', np.nan, inplace=True)
-            attrs['maxspeed'] = attrs['maxspeed'].fillna(50)
-            attrs['width'] = pd.to_numeric(attrs['width'], errors='coerce').fillna(2.0).astype(float)
-            attrs['lanes'] = attrs['lanes'].fillna(2)
+            attrs['width'] = pd.to_numeric(attrs['width'], errors='coerce')
+            attrs['width'] = attrs['width'].fillna(attrs['width'].mean()).astype(float)
             attrs = attrs.drop(['ref', 'name'], axis=1)
-            attrs = attrs.fillna("unspecified")
             attrs['lanes'] = attrs['lanes'].apply(lambda x: _get_first_element(x)).astype(int)
+            attrs['lanes'] = attrs['lanes'].fillna(attrs['lanes'].mean()).astype(int)
             attrs['reversed'] = attrs['reversed'].apply(lambda x: _get_first_element(x))
-            attrs['maxspeed'] = pd.to_numeric(attrs['maxspeed'].apply(lambda x: _get_first_element(x)), errors='coerce').fillna(50).astype(int)
+            attrs['maxspeed'] = pd.to_numeric(attrs['maxspeed'].apply(lambda x: _get_first_element(x)), errors='coerce')
+            attrs['maxspeed'] =attrs['maxspeed'].fillna(attrs['maxspeed'].mean()).astype(int)
             attrs['reversed'] = attrs['reversed'].map({True: 1, False: 0}).astype(int)
             attrs['oneway'] = attrs['oneway'].map({True: 1, False: 0}).astype(int)
+            attrs = attrs.fillna("unspecified")
             vect = CountVectorizer(tokenizer=lambda x: x.split())
             cleaned_df = attrs
             for col in ['highway', 'access', 'junction', 'bridge', 'tunnel']:
