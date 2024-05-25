@@ -10,6 +10,11 @@ import numpy as np
 from shapely.geometry import box
 from scipy.spatial.distance import cdist
 from typing import Union, Literal
+import json
+
+
+with open("../data/osmnx_attributes.json") as f:
+    all_attributes = json.load(f)
 
 class OSMnxGraph:
     def __init__(self, gdf_events: gpd.GeoDataFrame, 
@@ -27,7 +32,7 @@ class OSMnxGraph:
         self.graph_nx = None
         self.graph_data = None
         self.y_column_name = y_column_name
-
+        self.all_attributes = all_attributes
 
     
     def get_node_attrs(self):
@@ -39,25 +44,25 @@ class OSMnxGraph:
         Returns:
             pd.DataFrame: cleaned dataframe that contains node features that consists of highway types and street count for each node.
         """
-
         if not any(col in self.gdf_nodes.columns for col in ['geometry', 'x', 'y', self.y_column_name, 'ref']):
             return self.gdf_nodes
-        attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', self.y_column_name, 'ref'], axis=1)
-        attrs['highway'] = attrs['highway'].replace(0, 'unknown')
+        attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', 'ref'], axis=1)
+        attrs.replace('NaN', np.nan, inplace=True)
+        attrs['highway'] = attrs['highway'].replace(np.nan, 'unknown')
+        cols_to_add = set([item for item in all_attributes['nodes_highway'] if item not in set(attrs['highway'])])
         vectorizer = CountVectorizer(tokenizer=lambda x: x.split())
         vectorized_feature = vectorizer.fit_transform(attrs['highway'])
         df_vect_feature = pd.DataFrame(vectorized_feature.toarray(), columns=vectorizer.get_feature_names_out())
-        df_vect_feature['index'] = attrs.index
-        df_vect_feature.set_index("index", inplace = True)
+        df_vect_feature.index = attrs.index
         cleaned_df = pd.merge(attrs, df_vect_feature, left_index=True, right_index=True)
         cleaned_df.fillna(0, inplace=True)
         cleaned_df.drop(['highway', 'unknown'], axis=1, inplace=True)
+        for col in cols_to_add:
+            cleaned_df[col] = 0
         self.gdf_nodes = cleaned_df
         return cleaned_df
     
-
-
-    def get_edge_attrs(self):
+    def get_edge_attrs(self, convert_to_meters: bool = False):
         """Method that gets edge attributes. Includes preprocessing:
         * lanes - add default value of 2
         * maxspeed - add default value of 50 as common speed limit in urban area
@@ -71,45 +76,74 @@ class OSMnxGraph:
         Returns:
             pd.DataFrame: cleaned DataFrame that contains edge features
         """
-
-        def _get_first_element(lst):
-            """Method that gets first element of list if lst is of type "list"
+        
+        def _convert_mph_to_kmh(speed):
+            """Method that converts speed from mph to km/h
             """
-            if isinstance(lst, list):
-                return lst[0]
-            else:
-                return lst
-
+            return round(speed * 1.60934)
+        
+        def _check_max_speed(speed):
+            """Method that checks if speed is in km/h and converts it if it is in mph
+            """
+            if 'mph' in speed:
+                speed = speed.replace('mph', '')
+                speed = int(speed)
+                speed = _convert_mph_to_kmh(speed)
+            return speed
+        
+        def _convert_to_meters(width):
+            """Method that converts width from feet to meters
+            """
+            speed = speed.replace('ft', '') if 'ft' in speed else speed
+            return round(width * 0.3048, 2)
+        
+        features_groups = ['highway', 'access', 'junction', 'bridge', 'tunnel']
         attrs = self.gdf_edges
+        for col in attrs.columns:
+            attrs = attrs.explode(col)
         if not any(col in attrs.columns for col in ['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry']):
             return attrs
         else:
-            attrs.replace('NaN', np.nan, inplace=True)
-            attrs['width'] = pd.to_numeric(attrs['width'], errors='coerce')
-            attrs['width'] = attrs['width'].fillna(attrs['width'].mean()).astype(float)
             attrs = attrs.drop(['ref', 'name'], axis=1)
-            attrs['lanes'] = attrs['lanes'].apply(lambda x: _get_first_element(x)).astype(int)
-            attrs['lanes'] = attrs['lanes'].fillna(attrs['lanes'].mean()).astype(int)
-            attrs['reversed'] = attrs['reversed'].apply(lambda x: _get_first_element(x))
-            attrs['maxspeed'] = pd.to_numeric(attrs['maxspeed'].apply(lambda x: _get_first_element(x)), errors='coerce')
-            attrs['maxspeed'] =attrs['maxspeed'].fillna(attrs['maxspeed'].mean()).astype(int)
+            attrs.replace('NaN', np.nan, inplace=True)
+            attrs['width'] = attrs['width'].astype(str).apply(_convert_to_meters) if convert_to_meters else attrs['width']
+            attrs['width'] = pd.to_numeric(attrs['width'], errors='coerce')
+            attrs['width'] = attrs['width'].fillna(round(attrs['width'].mean(), 2)).astype(float)
+            attrs['length'] = round(attrs['length'],2).astype(float)
+            attrs['lanes'] = attrs['lanes'].fillna(attrs['lanes'].astype(float).mean()).astype(int)
+            attrs['maxspeed'] = attrs['maxspeed'].astype(str).apply(_check_max_speed)
+            attrs['maxspeed'] = attrs["maxspeed"].replace('nan', np.nan)
+            attrs['maxspeed'] = attrs["maxspeed"].fillna(round(attrs['maxspeed'].astype(float).mean()))
             attrs['reversed'] = attrs['reversed'].map({True: 1, False: 0}).astype(int)
             attrs['oneway'] = attrs['oneway'].map({True: 1, False: 0}).astype(int)
             attrs = attrs.fillna("unspecified")
             vect = CountVectorizer(tokenizer=lambda x: x.split())
-            cleaned_df = attrs
-            for col in ['highway', 'access', 'junction', 'bridge', 'tunnel']:
-                attrs[col] = attrs[col].apply(lambda x: ' '.join(x) if isinstance(x, list) else str(x))
+            idx = attrs.index
+            cleaned_df = attrs.copy()
+            cleaned_df.reset_index(drop=True, inplace=True)
+            cleaned_df = cleaned_df.drop(['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry'], axis=1)
+            for col in features_groups:                  
                 vectorized_feature = vect.fit_transform(attrs[col])
                 df_feature_count = pd.DataFrame(vectorized_feature.toarray(), columns=vect.get_feature_names_out())
-                df_feature_count['index'] = attrs.index
-                df_feature_count.set_index("index", inplace = True)
-                new_index_tuples = [(u, v, x) for u, v, x in attrs.index]
-                new_index = pd.MultiIndex.from_tuples(new_index_tuples, names=['u', 'v', 'key'])
-                df_feature_count.index = new_index
-                df_feature_count = df_feature_count.rename(columns={col_nm: col + "_"+ col_nm for col_nm in df_feature_count.columns})
-                cleaned_df = pd.merge(cleaned_df, df_feature_count, left_index=True, right_index=True)
-            cleaned_df = cleaned_df.drop(['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry'], axis=1)
+                df_feature_count = df_feature_count.reset_index(drop=True)
+                columns_list = df_feature_count.columns.tolist()
+                if 'osmid' in columns_list:
+                    columns_list.remove('osmid')
+                columns_to_add = [item for item in all_attributes[f"edges_{col}"] if item not in columns_list]
+                df_feature_count = df_feature_count.rename(columns={col_nm: col + "_" + col_nm for col_nm in columns_list})
+                for col_to_add in columns_to_add:
+                    df_feature_count[col + "_" + col_to_add] = 0
+
+                cleaned_df.reset_index(drop=True, inplace=True)
+                df_feature_count.reset_index(drop=True, inplace=True)
+                cleaned_df = pd.concat([cleaned_df, df_feature_count], axis=1)
+            
+            cleaned_df.set_index(idx, inplace=True) 
+            cleaned_df.drop(['est_width'], axis=1, inplace=True) if 'est_width' in cleaned_df.columns else None
+            cols_to_drop = [col for col in cleaned_df.columns if 'unspecified' in col]
+            for col in cols_to_drop:
+                if col in cleaned_df.columns:
+                    cleaned_df = cleaned_df.drop(col, axis=1)
             self.gdf_edges = cleaned_df
             return cleaned_df
         
