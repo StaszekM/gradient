@@ -16,6 +16,7 @@ import json
 with open("../data/osmnx_attributes.json") as f:
     all_attributes = json.load(f)
 
+
 class OSMnxGraph:
     def __init__(self, gdf_events: gpd.GeoDataFrame, 
                  gdf_nodes: gpd.GeoDataFrame, 
@@ -37,7 +38,7 @@ class OSMnxGraph:
     
     def get_node_attrs(self):
         """Method to extract node features from OSMNx nodes GeoDataFrame. In that case retrieves highway types and street_count
-        for each node. Cleaning process included applying CountVectorizer to highway column that represents highway types. Also the 
+        for each node. Cleaning process included applying CountVectorizer to highway column that represents highway types. Also the
         "ref' column was removed.
 
 
@@ -176,17 +177,20 @@ class OSMnxGraph:
             pyg_graph.y = torch.tensor(self.gdf_edges[self.y_column_name].values, dtype=torch.long)
             attrs = self.get_edge_attrs()
         if normalize_y:
-            pyg_graph.y = torch.where(pyg_graph.y > 0, torch.ones_like(pyg_graph.y), torch.zeros_like(pyg_graph.y))
+            pyg_graph.y = torch.where(
+                pyg_graph.y > 0,
+                torch.ones_like(pyg_graph.y),
+                torch.zeros_like(pyg_graph.y),
+            )
         pyg_graph.x = torch.tensor(attrs.values, dtype=torch.float32)
         self.graph_data = pyg_graph
         return pyg_graph
-        
-    
+
     def show_statistics(self):
         """Shows graph statistics
 
         Returns:
-            dict: graph statistics that includes: 
+            dict: graph statistics that includes:
                     * Nodes - nodes count
                     * Edges - edges count
                     * Nodes class - number of nodes class
@@ -194,7 +198,11 @@ class OSMnxGraph:
                     * Graph density - graph density in percent
         """
         data = self.graph_data
-        max_edges = data.num_nodes * (data.num_nodes- 1) if data.is_directed() else data.num_nodes * (data.num_nodes - 1) // 2
+        max_edges = (
+            data.num_nodes * (data.num_nodes - 1)
+            if data.is_directed()
+            else data.num_nodes * (data.num_nodes - 1) // 2
+        )
         edges = data.num_edges if data.is_directed() else data.num_edges // 2
         return {
             "Nodes": data.num_nodes,
@@ -204,7 +212,6 @@ class OSMnxGraph:
             "Directed": data.is_directed(),
             "Graph density [%]": round((edges / (max_edges) * 100), 3),
         }
-    
 
     def _get_lat_lon_distance(self, lat, lon, meters):
         """Calculates the coordinates from given latitude and longitude and distance in meters in 4 directions to make a square.
@@ -219,15 +226,15 @@ class OSMnxGraph:
         """
         earth = 6378.137  # Radius of the Earth in kilometers
         pi = math.pi
-        
+
         # Conversion factor from meters to degrees
         m = (1 / ((2 * pi / 360) * earth)) / 1000  # 1 meter in degree
-        
+
         new_latitude_N = lat + (meters * m)
         new_latitude_S = lat - (meters * m)
         new_longitude_E = lon + (meters * m) / math.cos(lat * (pi / 180))
         new_longitude_W = lon - (meters * m) / math.cos(lat * (pi / 180))
-        
+
         return new_latitude_N, new_latitude_S, new_longitude_W, new_longitude_E
     
     
@@ -243,6 +250,7 @@ class OSMnxGraph:
         Returns:
             first_dist_osmid (int): osmid for node closest to event point
         """
+
         def _calculate_distance(coord1, coord2):
             """Calculates cdist between 2 coordinates
 
@@ -309,9 +317,10 @@ class OSMnxGraph:
                 nodes_or_edges_within_square = self.gdf_nodes[self.gdf_nodes.intersects(square)]
             elif element_type == "edge":
                 # Check for edges within the square
-                nodes_or_edges_within_square = self.gdf_edges[self.gdf_edges.intersects(square)]
+                nodes_or_edges_within_square = self.gdf_edges[
+                    self.gdf_edges.intersects(square)
+                ]
 
-            
             # If no nodes/edges found, increase square size and repeat
             while len(nodes_or_edges_within_square) == 0:
                 square_edge_length += 100

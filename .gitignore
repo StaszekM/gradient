@@ -19,3 +19,8 @@ notebooks/test_wandb/wandb
 notebooks/test_wandb/artifacts
 .env
 .DS_Store
+.idea/
+wandb
+config.yml
+downstream_task_config/*.yml
+!downstream_task_config/*.dist.yml
