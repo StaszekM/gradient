@@ -92,10 +92,14 @@ class OSMnxGraph:
                 speed = _convert_mph_to_kmh(speed)
             return speed
         
+
         def _convert_to_meters(width):
             """Method that converts width from feet to meters
             """
-            speed = speed.replace('ft', '') if 'ft' in speed else speed
+            width = width.replace('ft', '') if 'ft' in width else width
+            width = width.replace("\'", '.') if "\'" in width else width
+            width = width.replace('"', '') if '"' in width else width
+            width = float(width)
             return round(width * 0.3048, 2)
         
         features_groups = ['highway', 'access', 'junction', 'bridge', 'tunnel']
@@ -128,8 +132,6 @@ class OSMnxGraph:
                 df_feature_count = pd.DataFrame(vectorized_feature.toarray(), columns=vect.get_feature_names_out())
                 df_feature_count = df_feature_count.reset_index(drop=True)
                 columns_list = df_feature_count.columns.tolist()
-                if 'osmid' in columns_list:
-                    columns_list.remove('osmid')
                 columns_to_add = [item for item in all_attributes[f"edges_{col}"] if item not in columns_list]
                 df_feature_count = df_feature_count.rename(columns={col_nm: col + "_" + col_nm for col_nm in columns_list})
                 for col_to_add in columns_to_add:
