@@ -47,7 +47,7 @@ class OSMnxGraph:
         """
         if not any(col in self.gdf_nodes.columns for col in ['geometry', 'x', 'y', self.y_column_name, 'ref']):
             return self.gdf_nodes
-        attrs = self.gdf_nodes.drop(['geometry', 'x', 'y', 'ref'], axis=1)
+        attrs = self.gdf_nodes.drop([ 'x', 'y', 'ref'], axis=1)
         attrs.replace('NaN', np.nan, inplace=True)
         attrs['highway'] = attrs['highway'].replace(np.nan, 'unknown')
         cols_to_add = set([item for item in all_attributes['nodes_highway'] if item not in set(attrs['highway'])])
@@ -106,7 +106,7 @@ class OSMnxGraph:
         attrs = self.gdf_edges
         for col in attrs.columns:
             attrs = attrs.explode(col)
-        if not any(col in attrs.columns for col in ['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry']):
+        if not any(col in attrs.columns for col in ['highway','osmid', 'access', 'junction', 'bridge', 'tunnel']):
             return attrs
         else:
             attrs = attrs.drop(['ref', 'name'], axis=1)
@@ -119,6 +119,7 @@ class OSMnxGraph:
             attrs['maxspeed'] = attrs['maxspeed'].astype(str).apply(_check_max_speed)
             attrs['maxspeed'] = attrs["maxspeed"].replace('nan', np.nan)
             attrs['maxspeed'] = attrs["maxspeed"].fillna(round(attrs['maxspeed'].astype(float).mean()))
+            attrs['maxspeed'] = attrs['maxspeed'].astype(int)
             attrs['reversed'] = attrs['reversed'].map({True: 1, False: 0}).astype(int)
             attrs['oneway'] = attrs['oneway'].map({True: 1, False: 0}).astype(int)
             attrs = attrs.fillna("unspecified")
@@ -126,7 +127,7 @@ class OSMnxGraph:
             idx = attrs.index
             cleaned_df = attrs.copy()
             cleaned_df.reset_index(drop=True, inplace=True)
-            cleaned_df = cleaned_df.drop(['highway','osmid', 'access', 'junction', 'bridge', 'tunnel', 'geometry'], axis=1)
+            cleaned_df = cleaned_df.drop(['highway','osmid', 'access', 'junction', 'bridge', 'tunnel'], axis=1)
             for col in features_groups:                  
                 vectorized_feature = vect.fit_transform(attrs[col])
                 df_feature_count = pd.DataFrame(vectorized_feature.toarray(), columns=vect.get_feature_names_out())
