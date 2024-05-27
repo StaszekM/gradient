@@ -1,0 +1,57 @@
+params:
+  # parameters related to constructing the H3 layer in hetero graph
+  H3_RESOLUTION: 9
+  H3_YEAR: 2017
+  H3_EMBEDDING_METHOD: "count-embedder"
+
+  # path to save the lightning checkpoints and logs
+  TRAIN_SAVE_DIR: "/path/to/logs"
+
+  # for now, this parameter is ignored, later on we can pass a list of operations in construction pipeline
+  DATASET_CONTRUCTION_METHOD: "drop-non-matching-columns"
+
+  # training parameters
+  EPOCHS: 300
+  SWEEP_RUNS_COUNT: 50
+  WANDB_SWEEP_PARAMS:
+    method: bayes
+    metric:
+      goal: maximize
+      name: mean_f1
+    parameters:
+      hidden_channels:
+        values:
+        - 10
+        - 20
+        - 30
+        - 40
+        - 50
+      learning_rate:
+        distribution: log_uniform_values
+        max: 0.01
+        min: 1.0e-05
+      lin_layer_size:
+        values:
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+      num_conv_layers:
+        values:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+      num_lin_layers:
+        values:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+      weight_decay:
+        distribution: log_uniform_values
+        max: 0.01
+        min: 1.0e-05
