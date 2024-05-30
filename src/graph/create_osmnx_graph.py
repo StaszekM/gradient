@@ -4,13 +4,9 @@ import numpy as np
 import torch
 import pandas as pd
 import osmnx as ox
-import math
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
-from shapely.geometry import box
-from scipy.spatial.distance import cdist
 from typing import Union, Literal
-import json
 
 
 class OSMnxGraph:
@@ -251,77 +247,6 @@ class OSMnxGraph:
             "Directed": data.is_directed(),
             "Graph density [%]": round((edges / (max_edges) * 100), 3),
         }
-
-    def _get_lat_lon_distance(self, lat, lon, meters):
-        """Calculates the coordinates from given latitude and longitude and distance in meters in 4 directions to make a square.
-
-        Args:
-            lat (float): latitude
-            lon (float): longitude
-            meters (float): distance in meters
-
-        Returns:
-            NSWE points (floats) : coordinates North, South, West and East from given point in given distance
-        """
-        earth = 6378.137  # Radius of the Earth in kilometers
-        pi = math.pi
-
-        # Conversion factor from meters to degrees
-        m = (1 / ((2 * pi / 360) * earth)) / 1000  # 1 meter in degree
-
-        new_latitude_N = lat + (meters * m)
-        new_latitude_S = lat - (meters * m)
-        new_longitude_E = lon + (meters * m) / math.cos(lat * (pi / 180))
-        new_longitude_W = lon - (meters * m) / math.cos(lat * (pi / 180))
-
-        return new_latitude_N, new_latitude_S, new_longitude_W, new_longitude_E
-
-    def _find_nearest_node(self, event_point, nodes):
-        """Finds nearest node from given event point based on cdist
-
-        Args:
-            event_point (Point): event point
-            nodes (pd.Series): pandas series with node geometry
-
-        Returns:
-            first_dist_osmid (int): osmid for node closest to event point
-        """
-
-        def _calculate_distance(coord1, coord2):
-            """Calculates cdist between 2 coordinates
-
-            Args:
-                coord1 (Point): first coord
-                coord2 (Point): second coord
-
-            Returns:
-                distance: distance between coordinates
-            """
-            return cdist([coord1], [coord2])[0, 0]
-
-        event_point = np.array(event_point.xy).T[0]
-        event_series = pd.Series([event_point] * len(nodes), index=nodes.index)
-        sorted_nodes = nodes.combine(event_series, _calculate_distance).sort_values()
-        first_dist_osmid = sorted_nodes.index[0]
-        return first_dist_osmid
-
-    def _find_nearest_edge(self, event_point, edges):
-        """Finds nearest edge from given event point
-
-        Args:
-            event_point (Point): event point
-            edges (pd.Series): edges geometry series
-        """
-
-        def _calculate_edge_distance(edge, event_point):
-            return edge.distance(event_point)
-
-        event_series = pd.Series([event_point] * len(edges), index=edges.index)
-        sorted_edges = edges.combine(
-            event_series, _calculate_edge_distance
-        ).sort_values()
-        first_dist_osmid = sorted_edges.index[0]
-        return first_dist_osmid
 
     def _aggregate(
         self,
