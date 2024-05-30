@@ -294,8 +294,6 @@ class OSMnxGraph:
             aggregated, left_index=True, right_index=True, how="left"
         ).fillna(0)
 
-        elements.rename(columns={aggregation_method: self.y_column_name}, inplace=True)
-
         if element_type == "node":
             self.gdf_nodes = elements
         else:
