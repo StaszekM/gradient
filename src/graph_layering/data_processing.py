@@ -44,11 +44,15 @@ class Normalizer(DataProcessor):
 
         self._normalization_params = NormalizationParams()
 
-        self._normalization_params.hexes_std = hexes_std
+        self._normalization_params.hexes_std = self._handle_zeros_in_scale(hexes_std)
         self._normalization_params.hexes_mean = hexes_mean
-        self._normalization_params.osmnx_nodes_std = osmnx_nodes_std
+        self._normalization_params.osmnx_nodes_std = self._handle_zeros_in_scale(
+            osmnx_nodes_std
+        )
         self._normalization_params.osmnx_nodes_mean = osmnx_nodes_mean
-        self._normalization_params.layer_1_edges_std = layer_1_edges_std
+        self._normalization_params.layer_1_edges_std = self._handle_zeros_in_scale(
+            layer_1_edges_std
+        )
         self._normalization_params.layer_1_edges_mean = layer_1_edges_mean
 
     def transform_inplace(self, hetero_data_objs: "list[CityHeteroData]"):
@@ -67,3 +71,17 @@ class Normalizer(DataProcessor):
             data.osmnx_node_connected_to_osmnx_node.edge_attr = (
                 data.osmnx_node_connected_to_osmnx_node.edge_attr - layer_1_edges_mean
             ) / layer_1_edges_std
+
+    @staticmethod
+    def _handle_zeros_in_scale(scale: torch.Tensor):
+        """Set scales of near constant features to 1.
+
+        The goal is to avoid division by very small or zero values.
+
+        Adapted from sklearn.preprocessing._data._handle_zeros_in_scale
+        """
+
+        close_to_zero_mask = scale < 10 * torch.finfo(torch.float32).eps
+
+        scale[close_to_zero_mask] = 1.0
+        return scale
