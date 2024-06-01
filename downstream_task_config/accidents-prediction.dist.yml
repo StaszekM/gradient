@@ -1,19 +1,30 @@
 params:
-  # parameters related to constructing the H3 layer in hetero graph
-  H3_RESOLUTION: 9
-  H3_YEAR: 2017
-  H3_EMBEDDING_METHOD: "count-embedder"
+  ACCIDENTS_LOCATION: "/path/to/gradient/data/downstream_tasks/accidents_prediction/accidents.csv"
 
   # path to save the lightning checkpoints and logs
   TRAIN_SAVE_DIR: "/path/to/logs"
 
-  # for now, this parameter is ignored, later on we can pass a list of operations in construction pipeline
-  DATASET_CONTRUCTION_METHOD: "drop-non-matching-columns"
+  # each configuration results in a separate sweep (tabular or graph data, depending on the usage of OSMNX attributes)
+  # ortophoto is for now ignored because of lack of data
+  ATTRIBUTES_CONFIGURATIONS:
+  - USE_HEXES_ATTRS: true
+    USE_ORTOPHOTO: false
+    USE_OSMNX_ATTRS: false
+  - USE_HEXES_ATTRS: true
+    USE_ORTOPHOTO: false
+    USE_OSMNX_ATTRS: true
+  - USE_HEXES_ATTRS: false
+    USE_ORTOPHOTO: false
+    USE_OSMNX_ATTRS: true
 
-  # training parameters
-  EPOCHS: 300
+  # runs count for sweep (either tabular or graph data)
   SWEEP_RUNS_COUNT: 50
-  WANDB_SWEEP_PARAMS:
+
+
+
+  # sweep parameters used when data is graph
+  EPOCHS: 300
+  WANDB_SWEEP_PARAMS_GRAPH_DATA:
     method: bayes
     metric:
       goal: maximize
@@ -55,3 +66,26 @@ params:
         distribution: log_uniform_values
         max: 0.01
         min: 1.0e-05
+
+  # sweep parameters used when data is tabular
+  WANDB_SWEEP_PARAMS_TABULAR_DATA:
+    method: bayes
+    metric:
+      goal: maximize
+      name: mean_f1
+    parameters:
+      C:
+        distribution: log_uniform_values
+        max: 1
+        min: 1.0e-05
+      solver_penalty:
+        values:
+        - lbfgs;l2
+        - liblinear;l1
+        - liblinear;l2
+        - newton-cg;l2
+        - newton-cholesky;l2
+        - sag;l2
+        - saga;elasticnet
+        - saga;l1
+        - saga;l2

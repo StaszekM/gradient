@@ -1,5 +1,7 @@
 # for now, only accidents-prediction is supported, later we can add Żabka, airbnb or any other
 downstream_task: 'accidents-prediction'
 params:
-  ORGANIZED_DATASETS_LOCATION: "/path/to/gradient/data/organized-datasets"
+  ORGANIZED_GRAPHS_LOCATION: "/path/to/gradient/data/organized_graphs"
+  ORGANIZED_HEXES_LOCATION: "/path/to/gradient/data/organized-hexes"
+  OSMNX_ALL_ATTRIBUTES_LOCATION: "/path/to/gradient/data/osmnx_attributes.json"
 
