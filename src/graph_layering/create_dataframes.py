@@ -93,5 +93,6 @@ def create_osmnx_dataframes(
         left_index=True, right_index=True, right=gdf_edges_geometry
     )
     osmnx_edges = osmnx_edges.reset_index().rename_axis("edge_id", axis=0)
+    osmnx_edges = gpd.GeoDataFrame(osmnx_edges, geometry="geometry", crs=osmnx_crs)
 
-    return osmnx_nodes, cast(gpd.GeoDataFrame, osmnx_edges)
+    return osmnx_nodes, osmnx_edges
