@@ -20,6 +20,7 @@ def train(
     hparams,
     train_save_dir,
     epochs: int = 100,
+    binary: bool =True,
 ):
     normalizer = Normalizer()
 
@@ -73,19 +74,33 @@ def train(
             test_data.x_dict, test_data.edge_index_dict, test_data.edge_attr_dict
         )
         y_hat = torch.softmax(y_hat["hex"], dim=-1)
+        if binary:
+            f1 = f1_score(
+                test_data["hex"].y.cpu().numpy(),
+                y_hat.argmax(dim=-1).cpu().numpy(),
+                pos_label=1,
+                average="binary",
+            )
 
-        f1 = f1_score(
-            test_data["hex"].y.cpu().numpy(),
-            y_hat.argmax(dim=-1).cpu().numpy(),
-            pos_label=1,
-            average="binary",
-        )
+            auc = roc_auc_score(
+                test_data["hex"].y.cpu().numpy(),
+                y_hat[:, 1].cpu().numpy(),
+                average="micro",
+            )
+        else:
+            f1 = f1_score(
+                test_data["hex"].y.cpu().numpy(),
+                y_hat.argmax(dim=-1).cpu().numpy(),
+                pos_label=1,
+                average="weighted",
+            )
 
-        auc = roc_auc_score(
-            test_data["hex"].y.cpu().numpy(),
-            y_hat[:, 1].cpu().numpy(),
-            average="micro",
-        )
+            auc = roc_auc_score(
+                test_data["hex"].y.cpu().numpy(),
+                y_hat.cpu().numpy(),
+                average="micro",
+                multi_class='ovr'
+            )
         accuracy = (y_hat.argmax(dim=-1) == test_data["hex"].y).sum().item() / len(
             test_data["hex"].y
         )

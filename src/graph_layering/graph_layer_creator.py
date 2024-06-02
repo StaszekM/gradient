@@ -128,15 +128,9 @@ class GraphLayerController:
             .explode(column="v")
             .reset_index(drop=True)
         )
-        print(result['u'])
-        print(type(result['u'].iloc[0]))
         hex_id_int = result["u"].apply(int, base=16).astype(pd.Int64Dtype())
-        print("XD")
-        print(result['v'])
-        print(type(result['v'].iloc[0]))
         
         result['v'] = result['v'].fillna("0")
-        print(result['v'].isna().sum())
         neighbour_int = result["v"].apply(int, base=16).astype(pd.Int64Dtype())
 
         sorter: Callable[[Iterable[int]], Tuple[int, ...]] = lambda x: tuple(sorted(x))
