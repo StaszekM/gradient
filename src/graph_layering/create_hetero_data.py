@@ -20,6 +20,11 @@ def create_hetero_data(
         SourceType.OSMNX_NODES
     )
 
+    for col in hexes_y_columns_names:
+        assert (
+            col not in controller.hexes_centroids_gdf[hexes_attrs_columns_names].columns
+        )
+
     data.hex.x = torch.tensor(
         controller.hexes_centroids_gdf[hexes_attrs_columns_names].to_numpy(),
         dtype=torch.float32,

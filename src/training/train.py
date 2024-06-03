@@ -63,9 +63,6 @@ def train(
     )
     trainer.fit(model, train_loader, val_loader)
 
-    print("Best model path:")
-    print(checkpoint_callback.best_model_path)
-
     model: pl.LightningModule = HeteroGNNModule.load_from_checkpoint(
         checkpoint_callback.best_model_path, hetero_data=train_data[0]
     )
