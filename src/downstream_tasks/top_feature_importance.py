@@ -37,7 +37,7 @@ def get_top_features(task: Union[Literal["accidents"], Literal["airbnb"], Litera
 
 
 
-tasks = ['airbnb', 'accidents']
+tasks = ['zabka_shops']
 values = [20, 50]
 percent = [True, False]
 
