@@ -27,7 +27,8 @@ seaborn==0.13.2
 wandb==0.16.4
 python-dotenv==1.0.1
 contextily==1.5.2
-
+streamlit==1.35.0
+streamlit_folium==0.20.0
 # install torch_geometric + accompanying packages (pyg-lib, torch-scatter and more) separately using Pip CLI
 # 
 # See https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html to find the correct version that matches your hardware
