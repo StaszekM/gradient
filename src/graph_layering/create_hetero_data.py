@@ -30,15 +30,21 @@ def create_hetero_data(
         dtype=torch.float32,
     )
 
+    assert torch.isnan(data.hex.x).sum() == 0
+
     data.hex.y = torch.tensor(
         controller.hexes_centroids_gdf[hexes_y_columns_names].to_numpy(),
         dtype=torch.float32,
     ).to(torch.int64)
 
+    assert torch.isnan(data.hex.y).sum() == 0
+
     data.osmnx_node.x = torch.tensor(
         controller.osmnx_nodes_gdf[osmnx_node_attrs_columns_names].to_numpy(),
         dtype=torch.float32,
     )
+
+    assert torch.isnan(data.osmnx_node.x).sum() == 0
 
     data.hex_connected_to_hex.edge_index = torch.tensor(
         edges_between_hexes.merge(
@@ -57,6 +63,8 @@ def create_hetero_data(
         .T
     )
 
+    assert torch.isnan(data.hex_connected_to_hex.edge_index).sum() == 0
+
     node_to_node_connections = (
         controller.osmnx_edges_gdf.merge(
             controller.osmnx_nodes_gdf.reset_index(), left_on="u", right_on="osmid"
@@ -70,19 +78,27 @@ def create_hetero_data(
         node_to_node_connections[["u_node_id", "v_node_id"]].to_numpy().T
     )
 
+    assert torch.isnan(data.osmnx_node_connected_to_osmnx_node.edge_index).sum() == 0
+
     data.osmnx_node_connected_to_osmnx_node.edge_attr = torch.tensor(
         node_to_node_connections[osmnx_edge_attrs_columns_names].to_numpy(),
         dtype=torch.float32,
     )
 
+    assert torch.isnan(data.osmnx_node_connected_to_osmnx_node.edge_attr).sum() == 0
+
     data.osmnx_node_connected_to_hex.edge_index = torch.tensor(
         edges_between_source_and_hexes[["source_id", "region_id"]].to_numpy().T
     )
+
+    assert torch.isnan(data.osmnx_node_connected_to_hex.edge_index).sum() == 0
 
     data.osmnx_node_connected_to_hex.edge_attr = torch.tensor(
         edges_between_source_and_hexes[virtual_edge_attrs_columns_names].to_numpy(),
         dtype=torch.float32,
     )
+
+    assert torch.isnan(data.osmnx_node_connected_to_hex.edge_attr).sum() == 0
 
     if squeeze_y:
         data.hex.y = data.hex.y.squeeze()
