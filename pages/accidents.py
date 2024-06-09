@@ -5,7 +5,6 @@ import sys
 from src.graph_layering.data_processing import Normalizer
 from src.lightning.hetero_gnn_module import HeteroGNNModule
 import os
-import folium
 import pandas as pd
 import torch
 import geopandas as gpd
@@ -36,8 +35,8 @@ def load_graph_data_and_model():
     data = pd.read_pickle(GRAPH_DATA_DICT_PATH)
 
     model = HeteroGNNModule.load_from_checkpoint(
-        MODEL_PATH, hetero_data=list(data.values())[3]
-    ).cpu()
+        MODEL_PATH, hetero_data=list(data.values())[3], map_location=torch.device("cpu")
+    )
     return data, model
 
 
