@@ -147,7 +147,7 @@ def cmap_fn(a):
         return "red"
     elif a == "FP":
         return "orange"
-    return "white"
+    return "green"
 
 
 accidents = pd.read_csv(ACCIDENTS_LOCATION)
@@ -162,7 +162,8 @@ geometry = accidents[["wsp_gps_x", "wsp_gps_y"]].apply(create_point, axis=1)
 gdf_accidents = gpd.GeoDataFrame(accidents, geometry=geometry, crs="EPSG:4326")
 gdf_accidents.drop(columns=["wsp_gps_x", "wsp_gps_y", "uczestnicy"], inplace=True)
 
-map = gdf_accidents.explore()
+
+map = gdf_accidents.explore(marker_kwds={'radius': 5})
 map = hexes[["ground_truth", "pred", "pred_proba", "error", "geometry"]].explore(
     m=map,
     column="error",
@@ -189,7 +190,8 @@ with st.spinner("Loading map..."):
 # FP - bierzemy 1 wypadek (O)
 # FN - bierzemy liczbe wszystkich wypadków w hex (P)
 # metryka całościowa: (N + M - O - P) / (liczba wypadków w mieście), ważne że ma być dobra liczba
-# kropki wypadków muszą być większe
-# tam gdzie jest dobra klasyfikacja, to idzie zielony kolor
+# kropki wypadków muszą być większe - DONE
+# tam gdzie jest dobra klasyfikacja, to idzie zielony kolor - DONE
+
 # tylko że opacity 0 - 1 od zera poprawnych wypadków w hex do max wypadków w hex
 # tam gdzie było FN, to idzie czerwony kolor, od opacity 0 - 1 zera do max wypadków w hex
