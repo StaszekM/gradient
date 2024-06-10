@@ -15,20 +15,15 @@ from src.organized_datasets_creation.utils.nominatim import (
     convert_nominatim_name_to_filename,
     resolve_nominatim_city_name,
 )
+from shapely.geometry import Point
 
 
 st.set_page_config(layout="wide", page_title="Main page")
 
-
+ACCIDENTS_LOCATION = "./data/downstream_tasks/accidents_prediction/accidents.csv"
 GRAPH_DATA_DICT_PATH = "./data/results_showcase/accidents/data.pkl"
 MODEL_PATH = "./data/results_showcase/accidents/model.ckpt"
 ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
-METADATA = {
-    "USE_HEXES_ATTRS": False,
-    "USE_ORTOPHOTO": False,
-    "USE_OSMNX_ATTRS": True,
-}
-HEX_FI_LOCATION = "./data/downstream_tasks/feature_importance"
 
 
 def load_graph_data_and_model():
@@ -155,7 +150,21 @@ def cmap_fn(a):
     return "white"
 
 
+accidents = pd.read_csv(ACCIDENTS_LOCATION)
+
+
+def create_point(x):
+    return Point(float(x[0]), float(x[1]))
+
+
+geometry = accidents[["wsp_gps_x", "wsp_gps_y"]].apply(create_point, axis=1)
+
+gdf_accidents = gpd.GeoDataFrame(accidents, geometry=geometry, crs="EPSG:4326")
+gdf_accidents.drop(columns=["wsp_gps_x", "wsp_gps_y", "uczestnicy"], inplace=True)
+
+map = gdf_accidents.explore()
 map = hexes[["ground_truth", "pred", "pred_proba", "error", "geometry"]].explore(
+    m=map,
     column="error",
     legend=True,
     style_kwds=dict(
@@ -172,3 +181,15 @@ map = hexes[["ground_truth", "pred", "pred_proba", "error", "geometry"]].explore
 with st.spinner("Loading map..."):
     st.header("Results map:")
     st_folium(map, returned_objects=[], use_container_width=True, return_on_hover=False)
+
+
+# metryka zliczania wypadków:
+# TP - bierzemy liczbę wszystkich wypadków w hex (N)
+# TN - bierzemy 1 wypadek (M)
+# FP - bierzemy 1 wypadek (O)
+# FN - bierzemy liczbe wszystkich wypadków w hex (P)
+# metryka całościowa: (N + M - O - P) / (liczba wypadków w mieście), ważne że ma być dobra liczba
+# kropki wypadków muszą być większe
+# tam gdzie jest dobra klasyfikacja, to idzie zielony kolor
+# tylko że opacity 0 - 1 od zera poprawnych wypadków w hex do max wypadków w hex
+# tam gdzie było FN, to idzie czerwony kolor, od opacity 0 - 1 zera do max wypadków w hex
