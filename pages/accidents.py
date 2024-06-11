@@ -1,6 +1,7 @@
 from sklearn.metrics import f1_score, roc_auc_score
 import streamlit as st
 import pandas as pd
+import colorsys
 import sys
 from src.graph_layering.data_processing import Normalizer
 from src.lightning.hetero_gnn_module import HeteroGNNModule
@@ -15,12 +16,11 @@ from src.organized_datasets_creation.utils.nominatim import (
     convert_nominatim_name_to_filename,
     resolve_nominatim_city_name,
 )
-from shapely.geometry import Point
-
 
 st.set_page_config(layout="wide", page_title="Main page")
 
-ACCIDENTS_LOCATION = "./data/downstream_tasks/accidents_prediction/accidents.csv"
+ACCIDENTS_LOCATION = "./data/results_showcase/accidents/accidents.parquet"
+ACCIDENTS_COUNT_LOCATION = "./data/results_showcase/accidents/accidents_count.csv"
 GRAPH_DATA_DICT_PATH = "./data/results_showcase/accidents/data.pkl"
 MODEL_PATH = "./data/results_showcase/accidents/model.ckpt"
 ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
@@ -126,6 +126,9 @@ hexes = hexes.assign(pred=response.argmax(dim=-1).detach().cpu().numpy())
 hexes = hexes.assign(pred_proba=response[:, 1].cpu().numpy())
 hexes = hexes.assign(ground_truth=data[city_value]["hex"].y.cpu().numpy())
 
+accidents_count = pd.read_csv(ACCIDENTS_COUNT_LOCATION)
+hexes = hexes.reset_index().merge(accidents_count, on="h3_id", how="inner")
+
 
 def create_error_column(row):
     if row["pred"] == row["ground_truth"] and row["pred"] == 1:
@@ -139,57 +142,73 @@ def create_error_column(row):
 
 
 hexes["error"] = hexes.apply(create_error_column, axis=1)
+max_accidents = hexes["accidents_count"].max()
+mean_accidents = hexes["accidents_count"].mean()
 
 
-def cmap_fn(a):
-    a = a["properties"]["error"]
-    if a == "FN":
-        return "red"
-    elif a == "FP":
-        return "orange"
+def cmap_fn(feature):
+
+    error_type = feature["properties"]["error"]
+    acc_count = feature["properties"]["accidents_count"]
+    min_color_saturation = 0.1
+    if error_type == "FN":
+        color = colorsys.hsv_to_rgb(
+            0,
+            min_color_saturation
+            + (1 - min_color_saturation) * (acc_count / max_accidents),
+            255,
+        )
+        return f"rgb{color}"
+    elif error_type == "FP":
+        color = colorsys.hsv_to_rgb(30 / 360, 0.1, 255)
+        return f"rgb{color}"
+    elif error_type == "TP" or error_type == "TN":
+        color = colorsys.hsv_to_rgb(
+            1 / 3,
+            min_color_saturation
+            + (1 - min_color_saturation) * (acc_count / max_accidents),
+            255,
+        )
+        return f"rgb{color}"
     return "white"
 
 
-accidents = pd.read_csv(ACCIDENTS_LOCATION)
+gdf_accidents = gpd.read_parquet(ACCIDENTS_LOCATION)
 
 
-def create_point(x):
-    return Point(float(x[0]), float(x[1]))
-
-
-geometry = accidents[["wsp_gps_x", "wsp_gps_y"]].apply(create_point, axis=1)
-
-gdf_accidents = gpd.GeoDataFrame(accidents, geometry=geometry, crs="EPSG:4326")
-gdf_accidents.drop(columns=["wsp_gps_x", "wsp_gps_y", "uczestnicy"], inplace=True)
-
-map = gdf_accidents.explore()
-map = hexes[["ground_truth", "pred", "pred_proba", "error", "geometry"]].explore(
+map = gdf_accidents.loc[
+    gdf_accidents["mie_nazwa"] == city_value.replace(", Poland", ""), :
+].explore(
+    tiles="CartoDB positron",
+)
+map = hexes[
+    ["ground_truth", "pred", "pred_proba", "error", "accidents_count", "geometry"]
+].explore(
     m=map,
     column="error",
     legend=True,
     style_kwds=dict(
-        fillOpacity=0.4,
-        opacity=0.4,
+        opacity=0.6,
+        fillOpacity=0.6,
         style_function=lambda feature: dict(
-            fillColor=cmap_fn(feature), color=cmap_fn(feature)
+            fillColor=cmap_fn(feature),
+            color=cmap_fn(feature),
         ),
     ),
     categorical=True,
+)
+
+TP_accidents = hexes.loc[hexes["error"] == "TP", "accidents_count"].sum()
+FN_accidents = hexes.loc[hexes["error"] == "FN", "accidents_count"].sum()
+
+correctly_predicted_accidents_ratio = (TP_accidents) / (TP_accidents + FN_accidents)
+
+st.metric(
+    label="Percent of correctly predicted accidents",
+    value=f"{correctly_predicted_accidents_ratio*100:.2f}%",
 )
 
 
 with st.spinner("Loading map..."):
     st.header("Results map:")
     st_folium(map, returned_objects=[], use_container_width=True, return_on_hover=False)
-
-
-# metryka zliczania wypadków:
-# TP - bierzemy liczbę wszystkich wypadków w hex (N)
-# TN - bierzemy 1 wypadek (M)
-# FP - bierzemy 1 wypadek (O)
-# FN - bierzemy liczbe wszystkich wypadków w hex (P)
-# metryka całościowa: (N + M - O - P) / (liczba wypadków w mieście), ważne że ma być dobra liczba
-# kropki wypadków muszą być większe
-# tam gdzie jest dobra klasyfikacja, to idzie zielony kolor
-# tylko że opacity 0 - 1 od zera poprawnych wypadków w hex do max wypadków w hex
-# tam gdzie było FN, to idzie czerwony kolor, od opacity 0 - 1 zera do max wypadków w hex
