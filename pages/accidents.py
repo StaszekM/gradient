@@ -1,3 +1,5 @@
+from typing import cast
+import folium
 from sklearn.metrics import f1_score, roc_auc_score
 import streamlit as st
 import pandas as pd
@@ -16,79 +18,32 @@ from src.organized_datasets_creation.utils.nominatim import (
     convert_nominatim_name_to_filename,
     resolve_nominatim_city_name,
 )
+from joblib import load
 
 st.set_page_config(layout="wide", page_title="Main page")
 
 ACCIDENTS_LOCATION = "./data/results_showcase/accidents/accidents.parquet"
 ACCIDENTS_COUNT_LOCATION = "./data/results_showcase/accidents/accidents_count.csv"
 GRAPH_DATA_DICT_PATH = "./data/results_showcase/accidents/data.pkl"
-MODEL_PATH = "./data/results_showcase/accidents/model.ckpt"
+MODEL_RESPONSES_PATH = "./data/results_showcase/accidents/model_responses.pkl"
 ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
 
 
-def load_graph_data_and_model():
+@st.cache_data
+def load_graph_data_and_model_responses():
     data = pd.read_pickle(GRAPH_DATA_DICT_PATH)
-
-    model = HeteroGNNModule.load_from_checkpoint(
-        MODEL_PATH, hetero_data=list(data.values())[3], map_location=torch.device("cpu")
-    )
-    return data, model
+    responses = load(MODEL_RESPONSES_PATH)
+    return data, responses
 
 
-data, model = load_graph_data_and_model()
+data, responses = load_graph_data_and_model_responses()
 
 city_value = st.selectbox("Select a city", data.keys())
 
 if city_value is None:
     sys.exit()
 
-
-folds = [
-    ("Wrocław, Poland", "Kraków, Poland"),
-    ("Kraków, Poland", "Poznań, Poland"),
-    ("Poznań, Poland", "Szczecin, Poland"),
-    ("Szczecin, Poland", "Warszawa, Poland"),
-    ("Warszawa, Poland", "Wrocław, Poland"),
-]
-
-normalizer = Normalizer()
-val_city, test_city = next((x for x in folds if x[1] == city_value), (None, None))
-train_data = [data[x] for x in data.keys() if x not in [val_city, test_city]]
-test_data = data[test_city]
-
-normalizer.fit(train_data)
-normalizer.transform_inplace([test_data])
-
-
-def forward(city_value):
-    with torch.no_grad():
-        city_data = data[city_value]
-        response = model(
-            city_data.x_dict, city_data.edge_index_dict, city_data.edge_attr_dict
-        )
-        response = torch.softmax(response["hex"], dim=-1)
-        return response
-
-
-response = forward(city_value)
-st.header("Results:")
-st.table(
-    {
-        "F1 score": f1_score(
-            data[city_value]["hex"].y.cpu().numpy(),
-            response.argmax(dim=-1).detach().cpu().numpy(),
-            pos_label=1,
-            average="binary",
-        ),
-        "AUC": roc_auc_score(
-            test_data["hex"].y.cpu().numpy(),
-            response[:, 1].cpu().numpy(),
-            average="micro",
-        ),
-        "Accuracy": (response.argmax(dim=-1) == test_data["hex"].y).sum().item()
-        / len(test_data["hex"].y),
-    },
-)
+response = responses[city_value]
 
 
 @st.cache_data
@@ -114,8 +69,9 @@ def load_map(city_value):
         )
     )
 
-    hexes = hexes.rename(columns={"region_id": "h3_id"}).rename_axis(
-        "region_id", axis=0
+    hexes = cast(
+        gpd.GeoDataFrame,
+        hexes.rename(columns={"region_id": "h3_id"}).rename_axis("region_id", axis=0),
     )
     return hexes
 
@@ -141,13 +97,13 @@ def create_error_column(row):
         return "FP"
 
 
-hexes["error"] = hexes.apply(create_error_column, axis=1)
+hexes["error"] = hexes.apply(create_error_column, axis=1)  # type: ignore
+
 max_accidents = hexes["accidents_count"].max()
 mean_accidents = hexes["accidents_count"].mean()
 
 
 def cmap_fn(feature):
-
     error_type = feature["properties"]["error"]
     acc_count = feature["properties"]["accidents_count"]
     min_color_saturation = 0.1
@@ -176,39 +132,74 @@ def cmap_fn(feature):
 gdf_accidents = gpd.read_parquet(ACCIDENTS_LOCATION)
 
 
-map = gdf_accidents.loc[
-    gdf_accidents["mie_nazwa"] == city_value.replace(", Poland", ""), :
-].explore(
-    tiles="CartoDB positron",
-)
-map = hexes[
-    ["ground_truth", "pred", "pred_proba", "error", "accidents_count", "geometry"]
-].explore(
-    m=map,
-    column="error",
-    legend=True,
-    style_kwds=dict(
-        opacity=0.6,
-        fillOpacity=0.6,
-        style_function=lambda feature: dict(
-            fillColor=cmap_fn(feature),
-            color=cmap_fn(feature),
-        ),
-    ),
-    categorical=True,
-)
-
 TP_accidents = hexes.loc[hexes["error"] == "TP", "accidents_count"].sum()
 FN_accidents = hexes.loc[hexes["error"] == "FN", "accidents_count"].sum()
 
 correctly_predicted_accidents_ratio = (TP_accidents) / (TP_accidents + FN_accidents)
+st.header("Results:")
 
 st.metric(
-    label="Percent of correctly predicted accidents",
-    value=f"{correctly_predicted_accidents_ratio*100:.2f}%",
+    "F1 score",
+    f"{f1_score(data[city_value]['hex'].y.cpu().numpy(), response.argmax(dim=-1).detach().cpu().numpy(), pos_label=1, average='binary'):.4f}",
+)
+st.metric(
+    "AUC",
+    f"{roc_auc_score( data[city_value]['hex'].y.cpu().numpy(), response[:, 1].cpu().numpy(), average='micro'):.4f}",
+)
+st.metric(
+    "Accuracy",
+    f"{(response.argmax(dim=-1) == data[city_value]['hex'].y).sum().item() / len(data[city_value]['hex'].y)*100:.2f}%",
+)
+st.metric(
+    "Percent of correctly predicted accidents",
+    f"{correctly_predicted_accidents_ratio*100:.2f}%",
 )
 
 
 with st.spinner("Loading map..."):
     st.header("Results map:")
+    st.write(
+        "You can control the map layers using the layer control on the top right corner of the map."
+    )
+    map = folium.Map(
+        tiles="CartoDB positron",
+    )
+    bounds = hexes.total_bounds.tolist()
+    map.fit_bounds([bounds[:2][::-1], bounds[2:][::-1]])
+
+    map = cast(
+        gpd.GeoDataFrame,
+        gdf_accidents.loc[
+            gdf_accidents["mie_nazwa"] == city_value.replace(", Poland", ""), :
+        ],
+    ).explore(m=map, name="accidents", tooltip=None)
+
+    map = cast(
+        gpd.GeoDataFrame,
+        hexes[
+            [
+                "ground_truth",
+                "pred",
+                "pred_proba",
+                "error",
+                "accidents_count",
+                "geometry",
+            ]
+        ],
+    ).explore(
+        m=map,
+        column="error",
+        legend=True,
+        style_kwds=dict(
+            fillOpacity=0.6,
+            opacity=0.1,
+            style_function=lambda feature: dict(
+                fillColor=cmap_fn(feature),
+                color="black",
+            ),
+        ),
+        categorical=True,
+        name="hexes",
+    )
+    folium.LayerControl().add_to(map)
     st_folium(map, returned_objects=[], use_container_width=True, return_on_hover=False)
