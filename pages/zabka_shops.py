@@ -20,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 st.set_page_config(layout="wide", page_title="Main page")
+st.title("Żabka shops prediction")
 
 ZABKA_SHOPS_LOCATION = "./data/downstream_tasks/zabka_shops/accidents.csv"
 GRAPH_DATA_DICT_PATH = "./data/results_showcase/accidents/data.pkl"
@@ -87,20 +88,20 @@ f1 = f1_score(
     average="binary",
 )
 st.header("Results:")
-st.table(
-    {
-        "F1 score": f1_score(
-            test_y,
-            y_pred,
-            pos_label=1,
-            average="binary",
-        ),
-        "AUC": roc_auc_score(
-            test_y,
-            response[:, 1].cpu().numpy(),
-            average="micro",
-        ),
-        "Accuracy": (response.argmax(dim=-1) == test_data["hex"].y).sum().item()
-        / len(test_data["hex"].y),
-    },
-)
+# st.table(
+#     {
+#         "F1 score": f1_score(
+#             test_y,
+#             y_pred,
+#             pos_label=1,
+#             average="binary",
+#         ),
+#         "AUC": roc_auc_score(
+#             test_y,
+#             response[:, 1].cpu().numpy(),
+#             average="micro",
+#         ),
+#         "Accuracy": (response.argmax(dim=-1) == test_data["hex"].y).sum().item()
+#         / len(test_data["hex"].y),
+#     },
+# )
