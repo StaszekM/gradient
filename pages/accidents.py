@@ -5,11 +5,8 @@ import streamlit as st
 import pandas as pd
 import colorsys
 import sys
-from src.graph_layering.data_processing import Normalizer
-from src.lightning.hetero_gnn_module import HeteroGNNModule
 import os
 import pandas as pd
-import torch
 import geopandas as gpd
 import numpy as np
 from sklearn.metrics import f1_score
@@ -19,8 +16,10 @@ from src.organized_datasets_creation.utils.nominatim import (
     resolve_nominatim_city_name,
 )
 from joblib import load
+import branca.colormap as cm
+from joblib import dump, load
 
-st.set_page_config(layout="wide", page_title="Main page")
+st.set_page_config(layout="wide", page_title="Accidents")
 st.title("🚗Accidents prediction🚗")
 
 ACCIDENTS_LOCATION = "./data/results_showcase/accidents/accidents.parquet"
@@ -32,7 +31,7 @@ ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
 
 @st.cache_data
 def load_graph_data_and_model_responses():
-    data = pd.read_pickle(GRAPH_DATA_DICT_PATH)
+    data = load(GRAPH_DATA_DICT_PATH)
     responses = load(MODEL_RESPONSES_PATH)
     return data, responses
 
@@ -81,7 +80,7 @@ hexes = load_map(city_value)
 
 hexes = hexes.assign(pred=response.argmax(dim=-1).detach().cpu().numpy())
 hexes = hexes.assign(pred_proba=response[:, 1].cpu().numpy())
-hexes = hexes.assign(ground_truth=data[city_value]["hex"].y.cpu().numpy())
+hexes = hexes.assign(ground_truth=data[city_value]["ground_truth"])
 
 accidents_count = pd.read_csv(ACCIDENTS_COUNT_LOCATION)
 hexes = hexes.reset_index().merge(accidents_count, on="h3_id", how="inner")
@@ -103,11 +102,13 @@ hexes["error"] = hexes.apply(create_error_column, axis=1)  # type: ignore
 max_accidents = hexes["accidents_count"].max()
 mean_accidents = hexes["accidents_count"].mean()
 
+min_color_saturation = 0.1
+
 
 def cmap_fn(feature):
     error_type = feature["properties"]["error"]
     acc_count = feature["properties"]["accidents_count"]
-    min_color_saturation = 0.1
+
     if error_type == "FN":
         color = colorsys.hsv_to_rgb(
             0,
@@ -141,21 +142,51 @@ st.header("Results:")
 
 st.metric(
     "F1 score",
-    f"{f1_score(data[city_value]['hex'].y.cpu().numpy(), response.argmax(dim=-1).detach().cpu().numpy(), pos_label=1, average='binary'):.4f}",
+    data[city_value]["F1 score"],
 )
 st.metric(
     "AUC",
-    f"{roc_auc_score( data[city_value]['hex'].y.cpu().numpy(), response[:, 1].cpu().numpy(), average='micro'):.4f}",
+    data[city_value]["AUC"],
 )
 st.metric(
     "Accuracy",
-    f"{(response.argmax(dim=-1) == data[city_value]['hex'].y).sum().item() / len(data[city_value]['hex'].y)*100:.2f}%",
+    data[city_value]["Accuracy"],
 )
 st.metric(
     "Percent of correctly predicted accidents",
-    f"{correctly_predicted_accidents_ratio*100:.2f}%",
+    data[city_value]["Percent of correctly predicted accidents"],
 )
 
+
+color_positive_min = colorsys.hsv_to_rgb(
+    1 / 3,
+    min_color_saturation,
+    255,
+)
+color_positive_max = colorsys.hsv_to_rgb(
+    1 / 3,
+    1,
+    255,
+)
+color_negative_min = colorsys.hsv_to_rgb(
+    0,
+    min_color_saturation,
+    255,
+)
+color_negative_max = colorsys.hsv_to_rgb(
+    0,
+    1,
+    255,
+)
+
+cmap_positive = cm.LinearColormap(
+    [color_positive_min, color_positive_max], vmin=0, vmax=max_accidents
+)
+cmap_positive.caption = "Acknowledged accidents"
+cmap_negative = cm.LinearColormap(
+    [color_negative_min, color_negative_max], vmin=0, vmax=max_accidents
+)
+cmap_negative.caption = "Omitted accidents"
 
 with st.spinner("Loading map..."):
     st.header("Results map:")
@@ -203,4 +234,6 @@ with st.spinner("Loading map..."):
         name="hexes",
     )
     folium.LayerControl().add_to(map)
+    map.add_child(cmap_positive)
+    map.add_child(cmap_negative)
     st_folium(map, returned_objects=[], use_container_width=True, return_on_hover=False)
