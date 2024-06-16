@@ -23,7 +23,8 @@ import folium
 st.set_page_config(layout="wide", page_title="Main page")
 st.title("🐸Żabka shops prediction🐸")
 
-ZABKA_SHOPS_LOCATION = "./data/results_showcase/zabka_shops/zabka_locations.csv"
+ZABKA_SHOPS_LOCATION = "./data/results_showcase/zabka_shops/zabka_locations.parquet"
+ZABKA_COUNT_LOCATION = "./data/results_showcase/zabka_shops/zabka_counts.parquet"
 DATA_DICT_PATH = "./data/results_showcase/zabka_shops/tabular_data_zabka.pkl" 
 MODEL_PATH = "./data/results_showcase/zabka_shops/model_zabka.pkl"
 ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
@@ -41,8 +42,6 @@ data, model = load_graph_data_and_model()
 city_value = st.selectbox("Select a city", data.keys())
 
 # data = data.drop("hex_id", axis=1)
-print(data)
-
 if city_value is None:
     sys.exit()
 
@@ -85,8 +84,9 @@ y_proba = model.predict_proba(test_X)[:, 1]
 def load_map(city_value):
 
     city_folder_name = convert_nominatim_name_to_filename(
-        resolve_nominatim_city_name(city_value)
+        resolve_nominatim_city_name(f"{city_value}, Poland")
     )
+    print(city_folder_name)
 
     hexes_years_folder = os.path.join(ORGANIZED_HEXES_LOCATION, city_folder_name)
 
@@ -116,15 +116,28 @@ hexes = hexes.assign(pred=y_pred)
 hexes = hexes.assign(pred_proba=y_proba)
 hexes = hexes.assign(ground_truth=data[city_value]['y'])
 
-zabkas_count = pd.read_csv(ZABKA_SHOPS_LOCATION)
-# hexes = hexes.reset_index().merge(zabkas_count, on="h3_id", how="inner")
+zabkas_count = pd.read_parquet(ZABKA_COUNT_LOCATION)
+zabkas_count = zabkas_count[zabkas_count['city_name'] == city_value]
+hexes = hexes.reset_index().merge(zabkas_count, on="h3_id", how="inner")
 
 
+def create_error_column(row):
+    if row["pred"] == row["ground_truth"] and row["pred"] == 1:
+        return "TP"
+    elif row["pred"] == row["ground_truth"] and row["pred"] == 0:
+        return "TN"
+    elif row["pred"] != row["ground_truth"] and row["ground_truth"] == 1:
+        return "FN"
+    elif row["pred"] != row["ground_truth"] and row["ground_truth"] == 0:
+        return "FP"
 
+hexes["error"] = hexes.apply(create_error_column, axis=1)  # type: ignore
+max_accidents = hexes["count_zabka"].max()
+mean_accidents = hexes["count_zabka"].mean()
 
 def cmap_fn(feature):
     error_type = feature["properties"]["error"]
-    acc_count = feature["properties"]["accidents_count"]
+    acc_count = feature["properties"]["count_zabka"]
     min_color_saturation = 0.1
     if error_type == "FN":
         color = colorsys.hsv_to_rgb(
@@ -147,7 +160,7 @@ def cmap_fn(feature):
         return f"rgb{color}"
     return "white"
 
-
+gdf_accidents = gpd.read_parquet(ZABKA_SHOPS_LOCATION)
 
 
 st.header("Results:")
@@ -174,12 +187,12 @@ with st.spinner("Loading map..."):
     bounds = hexes.total_bounds.tolist()
     map.fit_bounds([bounds[:2][::-1], bounds[2:][::-1]])
 
-    # map = cast(
-    #     gpd.GeoDataFrame,
-    #     gdf_accidents.loc[
-    #         gdf_accidents["mie_nazwa"] == city_value.replace(", Poland", ""), :
-    #     ],
-    # ).explore(m=map, name="accidents", tooltip=None)
+    map = cast(
+        gpd.GeoDataFrame,
+        gdf_accidents.loc[
+            gdf_accidents["city_name"] == city_value.replace(", Poland", ""), :
+        ],
+    ).explore(m=map, name="zabka_shops", tooltip=None)
 
     map = cast(
         gpd.GeoDataFrame,
@@ -188,14 +201,14 @@ with st.spinner("Loading map..."):
                 "ground_truth",
                 "pred",
                 "pred_proba",
-                # "error",
-                # "accidents_count",
+                "error",
+                "count_zabka",
                 "geometry",
             ]
         ],
     ).explore(
         m=map,
-        # column="error",
+        column="error",
         legend=True,
         style_kwds=dict(
             fillOpacity=0.6,
