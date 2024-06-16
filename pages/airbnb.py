@@ -9,9 +9,9 @@ from typing import cast
 import geopandas as gpd
 import numpy as np
 from streamlit_folium import st_folium
+import branca.colormap as cm
 
 st.set_page_config(layout="wide", page_title="Airbnb")
-
 
 MODEL_RESPONSES_PATH = "data/results_showcase/airbnb"
 GRAPH_DATA_PATH = "data/results_showcase/airbnb/graph_data.pkl"
@@ -93,33 +93,65 @@ hexes = hexes.assign(pred_proba=y_hat.amax(dim=-1).detach().cpu().numpy())
 hexes = hexes.assign(ground_truth=data[city_value]["hex"].y.detach().cpu().numpy())
 
 
-map = folium.Map(
-    tiles="CartoDB positron",
-)
-bounds = hexes.total_bounds.tolist()
-map.fit_bounds([bounds[:2][::-1], bounds[2:][::-1]])
-
-
 def cmap_fn(feature):
     ground_truth = feature["properties"]["ground_truth"]
     pred = feature["properties"]["pred"]
-    min_color_saturation = 0.1
 
     if ground_truth == pred:
         color = colorsys.hsv_to_rgb(
             1 / 3,
-            0.5,
+            (ground_truth + 1) / 5,
             255,
         )
         return f"rgb{color}"
     abs_diff = abs(ground_truth - pred)
     color = colorsys.hsv_to_rgb(
         0,
-        min_color_saturation + (0.5 - min_color_saturation) * (abs_diff / 4),
+        ((abs_diff + 1) / 5),
         255,
     )
     return f"rgb{color}"
 
+
+color_positive_min = colorsys.hsv_to_rgb(
+    1 / 3,
+    0.2,
+    255,
+)
+color_positive_max = colorsys.hsv_to_rgb(
+    1 / 3,
+    1,
+    255,
+)
+color_negative_min = colorsys.hsv_to_rgb(
+    0,
+    0.2,
+    255,
+)
+color_negative_max = colorsys.hsv_to_rgb(
+    0,
+    1,
+    255,
+)
+
+cmap_positive = cm.LinearColormap(
+    [color_positive_min, color_positive_max],
+    vmin=0,
+    vmax=5,
+).to_step(5)
+cmap_positive.caption = "Acknowledged Airbnb price class"
+cmap_negative = cm.LinearColormap(
+    [color_negative_min, color_negative_max], vmin=0, vmax=5
+).to_step(5)
+cmap_negative.caption = (
+    "Absolute difference between predicted and ground truth price class"
+)
+
+map = folium.Map(
+    tiles="CartoDB positron",
+)
+bounds = hexes.total_bounds.tolist()
+map.fit_bounds([bounds[:2][::-1], bounds[2:][::-1]])
 
 map = cast(
     gpd.GeoDataFrame,
@@ -145,6 +177,8 @@ map = cast(
     name="hexes",
 )
 folium.LayerControl().add_to(map)
+map.add_child(cmap_positive)
+map.add_child(cmap_negative)
 
 st.header("Results map:")
 st.write(

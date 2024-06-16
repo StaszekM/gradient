@@ -19,6 +19,7 @@ from src.organized_datasets_creation.utils.nominatim import (
     resolve_nominatim_city_name,
 )
 from joblib import load
+import branca.colormap as cm
 
 st.set_page_config(layout="wide", page_title="Accidents")
 
@@ -102,11 +103,13 @@ hexes["error"] = hexes.apply(create_error_column, axis=1)  # type: ignore
 max_accidents = hexes["accidents_count"].max()
 mean_accidents = hexes["accidents_count"].mean()
 
+min_color_saturation = 0.1
+
 
 def cmap_fn(feature):
     error_type = feature["properties"]["error"]
     acc_count = feature["properties"]["accidents_count"]
-    min_color_saturation = 0.1
+
     if error_type == "FN":
         color = colorsys.hsv_to_rgb(
             0,
@@ -156,6 +159,36 @@ st.metric(
 )
 
 
+color_positive_min = colorsys.hsv_to_rgb(
+    1 / 3,
+    min_color_saturation,
+    255,
+)
+color_positive_max = colorsys.hsv_to_rgb(
+    1 / 3,
+    1,
+    255,
+)
+color_negative_min = colorsys.hsv_to_rgb(
+    0,
+    min_color_saturation,
+    255,
+)
+color_negative_max = colorsys.hsv_to_rgb(
+    0,
+    1,
+    255,
+)
+
+cmap_positive = cm.LinearColormap(
+    [color_positive_min, color_positive_max], vmin=0, vmax=max_accidents
+)
+cmap_positive.caption = "Acknowledged accidents"
+cmap_negative = cm.LinearColormap(
+    [color_negative_min, color_negative_max], vmin=0, vmax=max_accidents
+)
+cmap_negative.caption = "Omitted accidents"
+
 with st.spinner("Loading map..."):
     st.header("Results map:")
     st.write(
@@ -202,4 +235,6 @@ with st.spinner("Loading map..."):
         name="hexes",
     )
     folium.LayerControl().add_to(map)
+    map.add_child(cmap_positive)
+    map.add_child(cmap_negative)
     st_folium(map, returned_objects=[], use_container_width=True, return_on_hover=False)
