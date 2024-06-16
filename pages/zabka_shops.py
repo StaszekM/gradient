@@ -25,59 +25,23 @@ st.title("🐸Żabka shops prediction🐸")
 
 ZABKA_SHOPS_LOCATION = "./data/results_showcase/zabka_shops/zabka_locations.parquet"
 ZABKA_COUNT_LOCATION = "./data/results_showcase/zabka_shops/zabka_counts.parquet"
-DATA_DICT_PATH = "./data/results_showcase/zabka_shops/tabular_data_zabka.pkl" 
-MODEL_PATH = "./data/results_showcase/zabka_shops/model_zabka.pkl"
+DATA_DICT_PATH = "./data/results_showcase/zabka_shops/results.pkl" 
 ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
 
 @st.cache_data
 def load_graph_data_and_model():
     data = joblib.load(DATA_DICT_PATH)
-    model = joblib.load(MODEL_PATH)
-    return data, model
+    return data
 
 
-data, model = load_graph_data_and_model()
+data = load_graph_data_and_model()
 
 
 city_value = st.selectbox("Select a city", data.keys())
 
-# data = data.drop("hex_id", axis=1)
+
 if city_value is None:
     sys.exit()
-
-
-
-# Logistic regression fit
-folds = [
-    ("Wrocław", "Kraków"),
-    ("Kraków", "Poznań"),
-    ("Poznań", "Szczecin"),
-    ("Szczecin", "Warszawa"),
-    ("Warszawa", "Wrocław"),
-]
-scaler = StandardScaler()
-X = pd.concat(
-[
-    m["X"]
-    for key, m in data.items()
-    if key != city_value
-]
-).to_numpy()
-y = (pd.concat(
-    [
-        m["y"]
-        for key, m in data.items()
-        if key != city_value
-    ]
-).to_numpy().ravel())
-
-X = scaler.fit_transform(X)
-test_X = data[city_value]["X"].to_numpy()
-test_X = scaler.transform(test_X)
-test_y = data[city_value]["y"].to_numpy().ravel()
-y_pred = model.predict(test_X)
-y_proba = model.predict_proba(test_X)[:, 1]
-
 
 
 @st.cache_data
@@ -86,7 +50,6 @@ def load_map(city_value):
     city_folder_name = convert_nominatim_name_to_filename(
         resolve_nominatim_city_name(f"{city_value}, Poland")
     )
-    print(city_folder_name)
 
     hexes_years_folder = os.path.join(ORGANIZED_HEXES_LOCATION, city_folder_name)
 
@@ -112,8 +75,8 @@ def load_map(city_value):
 
 hexes = load_map(city_value)
 
-hexes = hexes.assign(pred=y_pred)
-hexes = hexes.assign(pred_proba=y_proba)
+hexes = hexes.assign(pred=data[city_value]["y_pred"])
+hexes = hexes.assign(pred_proba=data[city_value]["y_proba"])
 hexes = hexes.assign(ground_truth=data[city_value]['y'])
 
 zabkas_count = pd.read_parquet(ZABKA_COUNT_LOCATION)
@@ -165,13 +128,13 @@ gdf_accidents = gpd.read_parquet(ZABKA_SHOPS_LOCATION)
 
 st.header("Results:")
 st.metric("F1 score", 
-          f"{f1_score(test_y, y_pred, pos_label=1, average='binary'):.4f}",
+          f"{data[city_value]['f1']:.4f}",
           )
 st.metric("AUC", 
-          f"{roc_auc_score(test_y, y_proba, average='micro'):.4f}",
+          f"{data[city_value]['roc_auc']:.4f}",
           )
 st.metric("Accuracy", 
-          f"{(y_pred == test_y).mean():.4f}",
+          f"{data[city_value]['accuracy']:.4f}",
           )
 
 

@@ -12,6 +12,7 @@ import branca.colormap as cm
 from joblib import load
 
 st.set_page_config(layout="wide", page_title="Airbnb")
+st.title("🏠Airbnb price prediction🏠")
 
 MODEL_RESPONSES_PATH = "data/results_showcase/airbnb"
 GRAPH_DATA_PATH = "data/results_showcase/airbnb/data.pkl"
