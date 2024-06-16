@@ -20,7 +20,7 @@ from src.organized_datasets_creation.utils.nominatim import (
 )
 from joblib import load
 
-st.set_page_config(layout="wide", page_title="Main page")
+st.set_page_config(layout="wide", page_title="Accidents")
 
 ACCIDENTS_LOCATION = "./data/results_showcase/accidents/accidents.parquet"
 ACCIDENTS_COUNT_LOCATION = "./data/results_showcase/accidents/accidents_count.csv"
