@@ -1,7 +1,6 @@
 import colorsys
 import os
 import folium
-from sklearn.metrics import f1_score, roc_auc_score
 import streamlit as st
 import torch
 from joblib import load
@@ -10,11 +9,12 @@ import geopandas as gpd
 import numpy as np
 from streamlit_folium import st_folium
 import branca.colormap as cm
+from joblib import load
 
 st.set_page_config(layout="wide", page_title="Airbnb")
 
 MODEL_RESPONSES_PATH = "data/results_showcase/airbnb"
-GRAPH_DATA_PATH = "data/results_showcase/airbnb/graph_data.pkl"
+GRAPH_DATA_PATH = "data/results_showcase/airbnb/data.pkl"
 ORGANIZED_HEXES_LOCATION = "data/organized-hexes"
 
 names_map = {
@@ -39,26 +39,9 @@ def load_graph_data_and_model_responses(city_value):
 data, y_hat = load_graph_data_and_model_responses(city_value)
 
 
-f1 = f1_score(
-    data[city_value]["hex"].y.detach().cpu().numpy(),
-    y_hat.argmax(dim=-1).detach().cpu().numpy(),
-    pos_label=1,
-    average="weighted",
-)
-
-auc = roc_auc_score(
-    data[city_value]["hex"].y.detach().cpu().numpy(),
-    y_hat.detach().cpu().numpy(),
-    average="micro",
-    multi_class="ovr",
-)
-accuracy = (y_hat.argmax(dim=-1) == data[city_value]["hex"].y).sum().item() / len(
-    data[city_value]["hex"].y
-)
-
-st.metric("F1 score", f"{f1:.4f}")
-st.metric("AUC", f"{auc:.4f}")
-st.metric("Accuracy", f"{accuracy:.4f}")
+st.metric("F1 score", f"{data[city_value]['F1 score']:.4f}")
+st.metric("AUC", f"{data[city_value]['AUC']:.4f}")
+st.metric("Accuracy", f"{data[city_value]['Accuracy']:.4f}")
 
 
 @st.cache_data
@@ -90,7 +73,7 @@ def load_map(city_value):
 hexes = load_map(city_value)
 hexes = hexes.assign(pred=y_hat.argmax(dim=-1).detach().cpu().numpy())
 hexes = hexes.assign(pred_proba=y_hat.amax(dim=-1).detach().cpu().numpy())
-hexes = hexes.assign(ground_truth=data[city_value]["hex"].y.detach().cpu().numpy())
+hexes = hexes.assign(ground_truth=data[city_value]["ground_truth"])
 
 
 def cmap_fn(feature):

@@ -17,6 +17,7 @@ from src.organized_datasets_creation.utils.nominatim import (
 )
 from joblib import load
 import branca.colormap as cm
+from joblib import dump, load
 
 st.set_page_config(layout="wide", page_title="Accidents")
 
@@ -29,7 +30,7 @@ ORGANIZED_HEXES_LOCATION = "./data/organized-hexes"
 
 @st.cache_data
 def load_graph_data_and_model_responses():
-    data = pd.read_pickle(GRAPH_DATA_DICT_PATH)
+    data = load(GRAPH_DATA_DICT_PATH)
     responses = load(MODEL_RESPONSES_PATH)
     return data, responses
 
@@ -78,7 +79,7 @@ hexes = load_map(city_value)
 
 hexes = hexes.assign(pred=response.argmax(dim=-1).detach().cpu().numpy())
 hexes = hexes.assign(pred_proba=response[:, 1].cpu().numpy())
-hexes = hexes.assign(ground_truth=data[city_value]["hex"].y.cpu().numpy())
+hexes = hexes.assign(ground_truth=data[city_value]["ground_truth"])
 
 accidents_count = pd.read_csv(ACCIDENTS_COUNT_LOCATION)
 hexes = hexes.reset_index().merge(accidents_count, on="h3_id", how="inner")
@@ -140,19 +141,19 @@ st.header("Results:")
 
 st.metric(
     "F1 score",
-    f"{f1_score(data[city_value]['hex'].y.cpu().numpy(), response.argmax(dim=-1).detach().cpu().numpy(), pos_label=1, average='binary'):.4f}",
+    data[city_value]["F1 score"],
 )
 st.metric(
     "AUC",
-    f"{roc_auc_score( data[city_value]['hex'].y.cpu().numpy(), response[:, 1].cpu().numpy(), average='micro'):.4f}",
+    data[city_value]["AUC"],
 )
 st.metric(
     "Accuracy",
-    f"{(response.argmax(dim=-1) == data[city_value]['hex'].y).sum().item() / len(data[city_value]['hex'].y)*100:.2f}%",
+    data[city_value]["Accuracy"],
 )
 st.metric(
     "Percent of correctly predicted accidents",
-    f"{correctly_predicted_accidents_ratio*100:.2f}%",
+    data[city_value]["Percent of correctly predicted accidents"],
 )
 
 
