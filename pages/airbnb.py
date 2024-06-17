@@ -123,7 +123,7 @@ cmap_positive = cm.LinearColormap(
     vmin=0,
     vmax=5,
 ).to_step(5)
-cmap_positive.caption = "Acknowledged Airbnb price class"
+cmap_positive.caption = "Detected Airbnb price class"
 cmap_negative = cm.LinearColormap(
     [color_negative_min, color_negative_max], vmin=0, vmax=5
 ).to_step(5)

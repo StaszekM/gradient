@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.title("✨Gradient Interactive Demo✨")
+st.title("✨ Gradient Interactive Demo ✨")
 
 st.markdown("""Welcome to the Results Dashboard! 
             

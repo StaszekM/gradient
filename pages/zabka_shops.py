@@ -161,7 +161,7 @@ color_negative_max = colorsys.hsv_to_rgb(
 cmap_positive = cm.LinearColormap(
     [color_positive_min, color_positive_max], vmin=0, vmax=max_accidents
 )
-cmap_positive.caption = "Acknowledged Zabka shops"
+cmap_positive.caption = "Detected Zabka shops"
 cmap_negative = cm.LinearColormap(
     [color_negative_min, color_negative_max], vmin=0, vmax=max_accidents
 )
