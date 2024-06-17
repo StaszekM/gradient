@@ -1,6 +1,5 @@
 from typing import cast
 import folium
-from sklearn.metrics import f1_score, roc_auc_score
 import streamlit as st
 import pandas as pd
 import colorsys
@@ -9,7 +8,6 @@ import os
 import pandas as pd
 import geopandas as gpd
 import numpy as np
-from sklearn.metrics import f1_score
 from streamlit_folium import st_folium
 from src.organized_datasets_creation.utils.nominatim import (
     convert_nominatim_name_to_filename,

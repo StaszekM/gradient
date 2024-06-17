@@ -1,4 +1,4 @@
-from sklearn.metrics import f1_score, roc_auc_score
+
 import streamlit as st
 import pandas as pd
 import sys
@@ -6,18 +6,17 @@ import os
 import pandas as pd
 import geopandas as gpd
 import numpy as np
-from sklearn.metrics import f1_score, accuracy_score
 from streamlit_folium import st_folium
 from src.organized_datasets_creation.utils.nominatim import (
     convert_nominatim_name_to_filename,
     resolve_nominatim_city_name,
 )
 from shapely.geometry import Point
-from sklearn.preprocessing import StandardScaler
 import joblib
 from typing import cast
 import colorsys
 import folium
+import branca.colormap as cm
 
 
 st.set_page_config(layout="wide", page_title="Main page")
@@ -98,6 +97,8 @@ hexes["error"] = hexes.apply(create_error_column, axis=1)  # type: ignore
 max_accidents = hexes["count_zabka"].max()
 mean_accidents = hexes["count_zabka"].mean()
 
+min_color_saturation = 0.1
+
 def cmap_fn(feature):
     error_type = feature["properties"]["error"]
     acc_count = feature["properties"]["count_zabka"]
@@ -136,7 +137,35 @@ st.metric("AUC",
 st.metric("Accuracy", 
           f"{data[city_value]['accuracy']:.4f}",
           )
+color_positive_min = colorsys.hsv_to_rgb(
+    1 / 3,
+    min_color_saturation,
+    255,
+)
+color_positive_max = colorsys.hsv_to_rgb(
+    1 / 3,
+    1,
+    255,
+)
+color_negative_min = colorsys.hsv_to_rgb(
+    0,
+    min_color_saturation,
+    255,
+)
+color_negative_max = colorsys.hsv_to_rgb(
+    0,
+    1,
+    255,
+)
 
+cmap_positive = cm.LinearColormap(
+    [color_positive_min, color_positive_max], vmin=0, vmax=max_accidents
+)
+cmap_positive.caption = "Acknowledged Zabka shops"
+cmap_negative = cm.LinearColormap(
+    [color_negative_min, color_negative_max], vmin=0, vmax=max_accidents
+)
+cmap_negative.caption = "Omitted Zabka shops"
 
 
 with st.spinner("Loading map..."):
@@ -185,6 +214,8 @@ with st.spinner("Loading map..."):
         name="hexes",
     )
     folium.LayerControl().add_to(map)
+    map.add_child(cmap_positive)
+    map.add_child(cmap_negative)
     st_folium(map, returned_objects=[], use_container_width=True, return_on_hover=False)
 
 
